@@ -1,0 +1,160 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Participant {
+  id          String            @id @default(cuid())
+  nickname    String            @unique
+  avatarUrl   String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  rig         Rig?
+  scores      TournamentScore[]
+  roundScores RoundScore[]
+}
+
+model Rig {
+  id            String      @id @default(cuid())
+  participantId String      @unique
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  
+  cpuName       String
+  cpuNormalized String
+  cpuScore      Int
+  
+  gpuName       String
+  gpuNormalized String
+  gpuScore      Int
+  vramGb        Int
+  
+  ramGb         Int
+  os            String      @default("Windows")
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model BenchmarkGpu {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  normalized  String   @unique
+  score       Int      // G3D Mark
+  tier        Int      // 1 (Entry) à 5 (Enthusiast)
+  updatedAt   DateTime @updatedAt
+}
+
+model BenchmarkCpu {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  normalized  String   @unique
+  score       Int      // CPU Mark (Gaming/Single-Thread)
+  tier        Int      // 1 à 5
+  updatedAt   DateTime @updatedAt
+}
+
+model Game {
+  id              String            @id @default(cuid())
+  igdbId          Int               @unique
+  name            String
+  slug            String
+  coverUrl        String?
+  summary         String?
+  genres          String?
+  
+  // Requirements chiffrés pour le matching
+  minCpuScore     Int               @default(0)
+  recCpuScore     Int               @default(0)
+  minGpuScore     Int               @default(0)
+  recGpuScore     Int               @default(0)
+  minRamGb        Int               @default(8)
+  recRamGb        Int               @default(16)
+  minVramGb       Int               @default(2)
+  recVramGb       Int               @default(6)
+  
+  tournaments     Tournament[]
+  tournamentGames TournamentGame[]
+  scores          TournamentScore[]
+  createdAt       DateTime          @default(now())
+}
+
+model Tournament {
+  id              String            @id @default(cuid())
+  name            String
+  status          String            @default("DRAFT") // DRAFT, IN_PROGRESS, COMPLETED
+  scoringRules    String?           // JSON string of scoring scale
+  games           Game[]
+  tournamentGames TournamentGame[]
+  scores          TournamentScore[]
+  createdAt       DateTime          @default(now())
+}
+
+model TournamentGame {
+  id           String            @id @default(cuid())
+  tournamentId String
+  tournament   Tournament        @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  gameId       String
+  game         Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  
+  scoringType  String            @default("SCOREBOARD") // SCOREBOARD or WIN_LOSE
+  order        Int               @default(0)
+  
+  rounds       TournamentRound[]
+  createdAt    DateTime          @default(now())
+
+  @@unique([tournamentId, gameId])
+}
+
+model TournamentRound {
+  id               String          @id @default(cuid())
+  tournamentGameId String
+  tournamentGame   TournamentGame  @relation(fields: [tournamentGameId], references: [id], onDelete: Cascade)
+  
+  roundNumber      Int             @default(1)
+  name             String?         // e.g. "Manche 1", "Finale"
+  
+  scores           RoundScore[]
+  createdAt        DateTime        @default(now())
+
+  @@unique([tournamentGameId, roundNumber])
+}
+
+model RoundScore {
+  id            String          @id @default(cuid())
+  roundId       String
+  round         TournamentRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   Participant     @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  
+  isWinner      Boolean?
+  rank          Int?
+  rawScore      Float?
+  points        Float           @default(0)
+  
+  createdAt     DateTime        @default(now())
+
+  @@unique([roundId, participantId])
+}
+
+model TournamentScore {
+  id            String      @id @default(cuid())
+  tournamentId  String
+  tournament    Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  gameId        String
+  game          Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  
+  rank          Int?
+  rawScore      Float?
+  points        Int         @default(0)
+  
+  createdAt     DateTime    @default(now())
+
+  @@unique([tournamentId, participantId, gameId])
+}
+

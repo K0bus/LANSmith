@@ -1,0 +1,40 @@
+{
+  "name": "lan_forge",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare && prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "node prisma/seed.js",
+    "hardware:seed": "tsx scripts/seed-hardware.ts",
+    "test": "tsx tests/compatibility.test.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@nuxtjs/tailwindcss": "^6.14.0",
+    "@prisma/client": "5.22.0",
+    "clsx": "^2.1.1",
+    "lucide-vue-next": "^1.0.0",
+    "nuxt": "^4.5.2",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^3.4.19",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
+    "@types/cheerio": "^0.22.35",
+    "@types/node": "^26.5.1",
+    "cheerio": "^1.2.0",
+    "prisma": "5.22.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}

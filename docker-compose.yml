@@ -1,0 +1,30 @@
+services:
+  lanforge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lanforge_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=file:/app/data/lanforge.db
+      - NUXT_PUBLIC_APP_NAME=LANSmith
+      - AUTO_SEED=true
+      # - TWITCH_CLIENT_ID=your_twitch_client_id_here
+      # - TWITCH_CLIENT_SECRET=your_twitch_client_secret_here
+      # - SEED_HARDWARE=false
+    volumes:
+      - lanforge_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  lanforge_data:
+    driver: local
