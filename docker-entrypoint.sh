@@ -28,16 +28,28 @@ else
   echo "⚠️  API IGDB / Twitch : NON CONFIGURÉE (Mode catalogue local hors-ligne activé)"
 fi
 
-# Seed de démonstration si AUTO_SEED=true
+# Seed de démonstration (joueurs, jeux, tournois) SEULEMENT si AUTO_SEED=true (désactivé par défaut)
 if [ "$AUTO_SEED" = "true" ]; then
-  echo "🌱 AUTO_SEED activé : insertion des données de démonstration..."
+  echo "🌱 AUTO_SEED=true : insertion des données de démonstration (jeux, joueurs, tournois)..."
   node prisma/seed.js || true
 fi
 
-# Seed des benchmarks GPU/CPU si SEED_HARDWARE=true
-if [ "$SEED_HARDWARE" = "true" ]; then
-  echo "⚡ SEED_HARDWARE activé : extraction et mise à jour des benchmarks CPU/GPU..."
+# Seed des benchmarks GPU/CPU : automatique si la table hardware est vide OU si SEED_HARDWARE=true
+CHECK_HW=0
+node -e "
+const { PrismaClient } = require('@prisma/client');
+const p = new PrismaClient();
+Promise.all([p.benchmarkGpu.count(), p.benchmarkCpu.count()]).then(([g, c]) => {
+  if (g === 0 && c === 0) process.exit(10);
+  process.exit(0);
+}).catch(() => process.exit(0)).finally(() => p.\$disconnect());
+" 2>/dev/null || CHECK_HW=$?
+
+if [ "$SEED_HARDWARE" = "true" ] || [ "$CHECK_HW" = "10" ]; then
+  echo "⚡ Initialisation / Mise à jour du catalogue de benchmarks GPU & CPU (PassMark)..."
   npx tsx scripts/seed-hardware.ts || true
+else
+  echo "✅ Catalogue hardware déjà indexé."
 fi
 
 echo "🚀 Démarrage de l'application LANSmith sur le port ${PORT:-3000}..."

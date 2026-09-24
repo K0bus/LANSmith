@@ -15,12 +15,12 @@ services:
       - PORT=3000
       - DATABASE_URL=file:/app/data/lanforge.db
       - NUXT_PUBLIC_APP_NAME=${NUXT_PUBLIC_APP_NAME:-LANSmith}
-      - AUTO_SEED=${AUTO_SEED:-true}
+      - AUTO_SEED=${AUTO_SEED:-false}
+      - SEED_HARDWARE=${SEED_HARDWARE:-false}
       - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID:-}
       - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET:-}
       - NUXT_TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID:-}
       - NUXT_TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET:-}
-      - SEED_HARDWARE=${SEED_HARDWARE:-false}
     volumes:
       - lanforge_data:/app/data
     healthcheck:

@@ -324,14 +324,31 @@ docker run -d \
   lanforge:latest
 ```
 
-### 3. Variables d'Environnement Docker
+### 3. Gestion du Catalogue Hardware (CPU & GPU)
+
+Le catalogue des benchmarks matériel (3 000+ GPUs et 6 700+ CPUs) est **initialisé automatiquement au premier lancement** si la base de données est vide.
+
+Pour forcer ou mettre à jour le catalogue manuellement à tout moment :
+
+- **Via Docker Compose (sans couper le conteneur) :**
+  ```bash
+  docker compose exec lanforge npm run hardware:seed
+  ```
+- **Via variable d'environnement au démarrage :**
+  Définir `SEED_HARDWARE=true` dans votre fichier `.env` ou `docker-compose.yml`.
+- **En développement local :**
+  ```bash
+  npm run hardware:seed
+  ```
+
+### 4. Variables d'Environnement Docker
 
 | Variable | Valeur par défaut | Description |
 | :--- | :--- | :--- |
 | `PORT` | `3000` | Port d'écoute du serveur web |
 | `DATABASE_URL` | `file:/app/data/lanforge.db` | Chemin du fichier SQLite dans le conteneur |
-| `AUTO_SEED` | `true` | Insère automatiquement les jeux et joueurs de démonstration au premier lancement |
-| `SEED_HARDWARE` | `false` | Lance le scraping et l'indexation PassMark au boot si activé (`true`) |
+| `AUTO_SEED` | `false` | Insère les jeux et joueurs de démonstration (`true` pour activer) |
+| `SEED_HARDWARE` | `false` | Force la mise à jour des benchmarks PassMark au boot si `true` (auto si base vide) |
 | `TWITCH_CLIENT_ID` | `""` | Identifiant client API Twitch / IGDB (optionnel) |
 | `TWITCH_CLIENT_SECRET` | `""` | Secret client API Twitch / IGDB (optionnel) |
 | `NUXT_PUBLIC_APP_NAME` | `"LANSmith"` | Nom public affiché dans l'interface |

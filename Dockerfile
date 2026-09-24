@@ -40,7 +40,7 @@ ENV NODE_ENV=production \
     NITRO_PORT=3000 \
     DATABASE_URL=file:/app/data/lanforge.db \
     NUXT_PUBLIC_APP_NAME=LANSmith \
-    AUTO_SEED=true
+    AUTO_SEED=false
 
 # Création du dossier pour la base SQLite persistante
 RUN mkdir -p /app/data
