@@ -340,10 +340,13 @@ export const CURATED_LAN_GAMES: IgdbGameSearchResult[] = [
 ];
 
 export async function getTwitchAccessToken(
-  clientId: string,
-  clientSecret: string
+  clientId?: string,
+  clientSecret?: string
 ): Promise<string | null> {
-  if (!clientId || !clientSecret || clientId.includes('your_twitch')) {
+  const resolvedClientId = (clientId || process.env.TWITCH_CLIENT_ID || process.env.NUXT_TWITCH_CLIENT_ID || '').trim();
+  const resolvedClientSecret = (clientSecret || process.env.TWITCH_CLIENT_SECRET || process.env.NUXT_TWITCH_CLIENT_SECRET || '').trim();
+
+  if (!resolvedClientId || !resolvedClientSecret || resolvedClientId.includes('your_twitch')) {
     return null;
   }
 
@@ -357,8 +360,8 @@ export async function getTwitchAccessToken(
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
+        client_id: resolvedClientId,
+        client_secret: resolvedClientSecret,
         grant_type: 'client_credentials'
       })
     });
@@ -370,10 +373,13 @@ export async function getTwitchAccessToken(
         expiresAt: now + data.expires_in * 1000
       };
       return data.access_token;
+    } else {
+      const errorBody = await res.text();
+      console.warn(`[IGDB] Twitch OAuth2 token request rejected (${res.status}): ${errorBody}`);
     }
   } catch (err) {
     console.warn(
-      '[IGDB] Failed to obtain Twitch OAuth2 token, fallback to local preset mode:',
+      '[IGDB] Failed to obtain Twitch OAuth2 token (network/DNS issue), fallback to local preset mode:',
       err
     );
   }

@@ -7,15 +7,20 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    env_file:
+      - path: .env
+        required: false
     environment:
       - NODE_ENV=production
       - PORT=3000
       - DATABASE_URL=file:/app/data/lanforge.db
-      - NUXT_PUBLIC_APP_NAME=LANSmith
-      - AUTO_SEED=true
-      # - TWITCH_CLIENT_ID=your_twitch_client_id_here
-      # - TWITCH_CLIENT_SECRET=your_twitch_client_secret_here
-      # - SEED_HARDWARE=false
+      - NUXT_PUBLIC_APP_NAME=${NUXT_PUBLIC_APP_NAME:-LANSmith}
+      - AUTO_SEED=${AUTO_SEED:-true}
+      - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID:-}
+      - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET:-}
+      - NUXT_TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID:-}
+      - NUXT_TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET:-}
+      - SEED_HARDWARE=${SEED_HARDWARE:-false}
     volumes:
       - lanforge_data:/app/data
     healthcheck:

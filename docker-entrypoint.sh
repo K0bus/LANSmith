@@ -10,8 +10,23 @@ if echo "$DATABASE_URL" | grep -q "^file:"; then
   fi
 fi
 
+# Mapper automatiquement les variables Twitch pour Nuxt/Nitro
+if [ -n "$TWITCH_CLIENT_ID" ] && [ -z "$NUXT_TWITCH_CLIENT_ID" ]; then
+  export NUXT_TWITCH_CLIENT_ID="$TWITCH_CLIENT_ID"
+fi
+if [ -n "$TWITCH_CLIENT_SECRET" ] && [ -z "$NUXT_TWITCH_CLIENT_SECRET" ]; then
+  export NUXT_TWITCH_CLIENT_SECRET="$TWITCH_CLIENT_SECRET"
+fi
+
 echo "📦 Initialisation / Synchronisation du schéma Prisma SQLite..."
 npx prisma db push --skip-generate
+
+# Vérification du statut de l'API Twitch / IGDB
+if [ -n "$TWITCH_CLIENT_ID" ] && [ -n "$TWITCH_CLIENT_SECRET" ] && [ "$TWITCH_CLIENT_ID" != "your_twitch_client_id_here" ]; then
+  echo "🎮 API IGDB / Twitch : ACTIVÉE (Client ID: ${TWITCH_CLIENT_ID:0:6}...)"
+else
+  echo "⚠️  API IGDB / Twitch : NON CONFIGURÉE (Mode catalogue local hors-ligne activé)"
+fi
 
 # Seed de démonstration si AUTO_SEED=true
 if [ "$AUTO_SEED" = "true" ]; then

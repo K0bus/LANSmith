@@ -5,8 +5,8 @@ export default defineEventHandler(async (event) => {
   const searchQuery = (query.q as string) || (query.search as string) || ''
 
   const config = useRuntimeConfig()
-  const clientId = config.twitchClientId || process.env.TWITCH_CLIENT_ID || ''
-  const clientSecret = config.twitchClientSecret || process.env.TWITCH_CLIENT_SECRET || ''
+  const clientId = String(config.twitchClientId || process.env.TWITCH_CLIENT_ID || process.env.NUXT_TWITCH_CLIENT_ID || '').trim()
+  const clientSecret = String(config.twitchClientSecret || process.env.TWITCH_CLIENT_SECRET || process.env.NUXT_TWITCH_CLIENT_SECRET || '').trim()
 
   const results = await searchIgdbGames(searchQuery, clientId, clientSecret)
 
