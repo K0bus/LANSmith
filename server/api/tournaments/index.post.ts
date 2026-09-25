@@ -2,7 +2,8 @@ import { prisma } from '~/server/utils/prisma'
 
 interface GameConfigInput {
   gameId: string
-  scoringType?: 'SCOREBOARD' | 'WIN_LOSE'
+  scoringType?: 'SCOREBOARD' | 'WIN_LOSE' | 'ROUND_ROBIN'
+  teamSize?: number
 }
 
 export default defineEventHandler(async (event) => {
@@ -37,6 +38,7 @@ export default defineEventHandler(async (event) => {
         create: gameConfigs.map((g, idx) => ({
           gameId: g.gameId,
           scoringType: g.scoringType || 'SCOREBOARD',
+          teamSize: g.teamSize || 1,
           order: idx + 1
         }))
       }
@@ -50,6 +52,16 @@ export default defineEventHandler(async (event) => {
             include: {
               scores: true
             }
+          },
+          matches: {
+            include: {
+              player1: { include: { rig: true } },
+              player2: { include: { rig: true } }
+            },
+            orderBy: [
+              { roundNumber: 'asc' },
+              { matchNumber: 'asc' }
+            ]
           }
         },
         orderBy: {

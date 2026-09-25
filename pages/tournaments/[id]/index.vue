@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Trophy, Medal, Award, ArrowLeft, Plus, RefreshCw, Gamepad2, Users, Flame, Star, CheckCircle2, Swords, ListOrdered, Layers, Share2, Copy, Check, ExternalLink, Radio, X } from 'lucide-vue-next'
+import { Trophy, Medal, Award, ArrowLeft, Plus, RefreshCw, Gamepad2, Users, Flame, Star, CheckCircle2, Swords, ListOrdered, Layers, Share2, Copy, Check, ExternalLink, Radio, X, Shuffle } from 'lucide-vue-next'
 import ScoreEntryModal from '~/components/ScoreEntryModal.vue'
+import RoundRobinModal from '~/components/RoundRobinModal.vue'
 
 const route = useRoute()
 const tournamentId = computed(() => route.params.id as string)
@@ -12,6 +13,7 @@ const { data: fullTournament, refresh: refreshFull } = await useFetch<any>(() =>
 const { data: participants } = await useFetch<any[]>('/api/participants')
 
 const isScoreModalOpen = ref(false)
+const isRoundRobinModalOpen = ref(false)
 const selectedGameId = ref<string | undefined>(undefined)
 const searchQuery = ref('')
 
@@ -49,7 +51,19 @@ const podium = computed(() => {
 
 function openScoreModalForGame(gameId?: string) {
   selectedGameId.value = gameId
-  isScoreModalOpen.value = true
+  
+  // Detect if game is Round-Robin
+  const game = boardData.value?.tournament?.games?.find((g: any) => g.id === gameId)
+  if (game?.scoringType === 'ROUND_ROBIN') {
+    isRoundRobinModalOpen.value = true
+  } else {
+    isScoreModalOpen.value = true
+  }
+}
+
+function openRoundRobinModal(gameId?: string) {
+  selectedGameId.value = gameId
+  isRoundRobinModalOpen.value = true
 }
 
 function onScoresSaved() {
@@ -91,7 +105,16 @@ function onScoresSaved() {
         </div>
       </div>
 
-      <div class="flex items-center gap-3 shrink-0">
+      <div class="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap">
+        <button 
+          v-if="boardData?.tournament?.games?.some((g: any) => g.scoringType === 'ROUND_ROBIN')"
+          @click="openRoundRobinModal()" 
+          class="px-3.5 py-2.5 rounded-xl bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.25)] transition-all cursor-pointer"
+        >
+          <Shuffle class="w-4 h-4 text-cyan-400" />
+          <span>Générateur Round-Robin</span>
+        </button>
+
         <button 
           @click="isShareModalOpen = true" 
           class="px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-cyan-400 hover:border-cyan-500/50 transition-all cursor-pointer flex items-center gap-2 text-xs font-mono font-bold"
@@ -149,12 +172,16 @@ function onScoresSaved() {
             <div class="flex items-center gap-1.5 mt-1">
               <span 
                 class="text-[10px] px-1.5 py-0.2 rounded font-mono font-semibold"
-                :class="g.scoringType === 'WIN_LOSE' ? 'bg-rose-950 text-rose-300 border border-rose-800/60' : 'bg-amber-950 text-amber-300 border border-amber-800/60'"
+                :class="{
+                  'bg-rose-950 text-rose-300 border border-rose-800/60': g.scoringType === 'WIN_LOSE',
+                  'bg-cyan-950 text-cyan-300 border border-cyan-800/60': g.scoringType === 'ROUND_ROBIN',
+                  'bg-amber-950 text-amber-300 border border-amber-800/60': g.scoringType !== 'WIN_LOSE' && g.scoringType !== 'ROUND_ROBIN'
+                }"
               >
-                {{ g.scoringType === 'WIN_LOSE' ? 'Victoire/Défaite' : 'Scoreboard' }}
+                {{ g.scoringType === 'WIN_LOSE' ? 'Victoire/Défaite' : (g.scoringType === 'ROUND_ROBIN' ? 'Round-Robin' : 'Scoreboard') }}
               </span>
               <span class="text-[10px] text-slate-400 font-mono">
-                {{ g.roundsCount > 0 ? `${g.roundsCount} manche${g.roundsCount > 1 ? 's' : ''}` : '0 manche' }}
+                {{ g.scoringType === 'ROUND_ROBIN' ? (g.completedMatches > 0 ? `${g.completedMatches}/${g.totalMatches} matchs` : `${g.totalMatches || 0} matchs`) : (g.roundsCount > 0 ? `${g.roundsCount} manche${g.roundsCount > 1 ? 's' : ''}` : '0 manche') }}
               </span>
             </div>
           </div>
@@ -244,18 +271,26 @@ function onScoresSaved() {
               <th 
                 v-for="g in boardData?.tournament?.games" 
                 :key="g.id"
-                class="p-4 text-center min-w-[140px]"
+                class="p-4 text-center min-w-[140px] cursor-pointer hover:bg-slate-900/60 transition-colors"
+                @click="openScoreModalForGame(g.id)"
+                :title="`Gérer les scores de ${g.name}`"
               >
                 <div class="flex flex-col items-center gap-0.5">
                   <span class="truncate max-w-[130px] font-bold text-white" :title="g.name">{{ g.name }}</span>
                   <div class="flex items-center gap-1 text-[9px]">
                     <span 
                       class="px-1 py-0.2 rounded font-bold uppercase"
-                      :class="g.scoringType === 'WIN_LOSE' ? 'text-rose-400 bg-rose-950/60' : 'text-amber-400 bg-amber-950/60'"
+                      :class="{
+                        'text-rose-400 bg-rose-950/60': g.scoringType === 'WIN_LOSE',
+                        'text-cyan-400 bg-cyan-950/60': g.scoringType === 'ROUND_ROBIN',
+                        'text-amber-400 bg-amber-950/60': g.scoringType !== 'WIN_LOSE' && g.scoringType !== 'ROUND_ROBIN'
+                      }"
                     >
-                      {{ g.scoringType === 'WIN_LOSE' ? '⚔️ W/L' : '🏆 Rang' }}
+                      {{ g.scoringType === 'WIN_LOSE' ? '⚔️ W/L' : (g.scoringType === 'ROUND_ROBIN' ? '🔁 RR' : '🏆 Rang') }}
                     </span>
-                    <span class="text-slate-500">({{ g.roundsCount }} m.)</span>
+                    <span class="text-slate-500">
+                      {{ g.scoringType === 'ROUND_ROBIN' ? `(${g.completedMatches || 0}/${g.totalMatches || 0} m.)` : `(${g.roundsCount} m.)` }}
+                    </span>
                   </div>
                 </div>
               </th>
@@ -304,7 +339,8 @@ function onScoresSaved() {
               <td 
                 v-for="g in boardData?.tournament?.games" 
                 :key="g.id"
-                class="p-4 text-center"
+                class="p-4 text-center cursor-pointer hover:bg-slate-900/40 transition-colors"
+                @click="openScoreModalForGame(g.id)"
               >
                 <div v-if="entry.gameScores[g.id]" class="space-y-1">
                   <!-- Tournament Points & Game Rank -->
@@ -325,12 +361,18 @@ function onScoresSaved() {
                     </span>
                   </div>
 
-                  <!-- Raw round sum & round details breakdown -->
+                  <!-- Raw round sum & round details breakdown / RR breakdown -->
                   <div class="text-[10px] text-slate-400 font-mono">
-                    <span class="text-slate-500 font-semibold">{{ entry.gameScores[g.id].rawRoundPoints }} pts m.</span>
-                    <span v-if="entry.gameScores[g.id].roundDetails?.length > 1" class="text-slate-600 ml-1">
-                      ({{ entry.gameScores[g.id].roundDetails.map(rd => `M${rd.roundNumber}:${rd.points}`).join(' · ') }})
-                    </span>
+                    <template v-if="entry.gameScores[g.id].scoringType === 'ROUND_ROBIN' && entry.gameScores[g.id].roundRobinStats">
+                      <span class="text-amber-400 font-bold">{{ entry.gameScores[g.id].roundRobinStats.rrPoints }} pts RR</span>
+                      <span class="text-slate-500 ml-1">({{ entry.gameScores[g.id].roundRobinStats.wins }}V-{{ entry.gameScores[g.id].roundRobinStats.draws }}N-{{ entry.gameScores[g.id].roundRobinStats.losses }}D)</span>
+                    </template>
+                    <template v-else>
+                      <span class="text-slate-500 font-semibold">{{ entry.gameScores[g.id].rawRoundPoints }} pts m.</span>
+                      <span v-if="entry.gameScores[g.id].roundDetails?.length > 1" class="text-slate-600 ml-1">
+                        ({{ entry.gameScores[g.id].roundDetails.map(rd => `M${rd.roundNumber}:${rd.points}`).join(' · ') }})
+                      </span>
+                    </template>
                   </div>
                 </div>
                 <span v-else class="text-slate-700">-</span>
@@ -349,13 +391,24 @@ function onScoresSaved() {
       </div>
     </div>
 
-    <!-- Score Entry Modal -->
+    <!-- Score Entry Modal (Scoreboard & Win/Loss) -->
     <ScoreEntryModal
       :isOpen="isScoreModalOpen"
       :tournament="fullTournament"
       :selectedGameId="selectedGameId"
       :participants="participants || []"
       @close="isScoreModalOpen = false"
+      @saved="onScoresSaved"
+      @openRoundRobin="(gId) => { isScoreModalOpen = false; openRoundRobinModal(gId) }"
+    />
+
+    <!-- Round Robin Modal (Tournament Matches Generator & Manager) -->
+    <RoundRobinModal
+      :isOpen="isRoundRobinModalOpen"
+      :tournament="fullTournament"
+      :selectedGameId="selectedGameId"
+      :participants="participants || []"
+      @close="isRoundRobinModalOpen = false"
       @saved="onScoresSaved"
     />
 

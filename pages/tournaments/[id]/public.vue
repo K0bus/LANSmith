@@ -474,12 +474,16 @@ onUnmounted(() => {
               <div class="flex items-center gap-2 mb-1">
                 <span 
                   class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase"
-                  :class="activeGame.scoringType === 'WIN_LOSE' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'"
+                  :class="{
+                    'bg-rose-500/20 text-rose-300 border border-rose-500/40': activeGame.scoringType === 'WIN_LOSE',
+                    'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40': activeGame.scoringType === 'ROUND_ROBIN',
+                    'bg-amber-500/20 text-amber-300 border border-amber-500/40': activeGame.scoringType !== 'WIN_LOSE' && activeGame.scoringType !== 'ROUND_ROBIN'
+                  }"
                 >
-                  {{ activeGame.scoringType === 'WIN_LOSE' ? '⚔️ Victoire / Défaite' : '🏆 Scoreboard' }}
+                  {{ activeGame.scoringType === 'WIN_LOSE' ? '⚔️ Victoire / Défaite' : (activeGame.scoringType === 'ROUND_ROBIN' ? '🔁 Round-Robin Toutes Rondes' : '🏆 Scoreboard') }}
                 </span>
                 <span class="text-xs font-mono font-bold text-slate-400">
-                  {{ activeGame.roundsCount > 0 ? `${activeGame.roundsCount} manche(s) disputée(s)` : 'En attente' }}
+                  {{ activeGame.scoringType === 'ROUND_ROBIN' ? (activeGame.completedMatches > 0 ? `${activeGame.completedMatches}/${activeGame.totalMatches} matchs joués` : `${activeGame.totalMatches || 0} matchs au calendrier`) : (activeGame.roundsCount > 0 ? `${activeGame.roundsCount} manche(s) disputée(s)` : 'En attente') }}
                 </span>
               </div>
 

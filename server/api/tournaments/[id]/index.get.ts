@@ -81,6 +81,16 @@ export default defineEventHandler(async (event) => {
               orderBy: {
                 roundNumber: 'asc'
               }
+            },
+            matches: {
+              include: {
+                player1: { include: { rig: true } },
+                player2: { include: { rig: true } }
+              },
+              orderBy: [
+                { roundNumber: 'asc' },
+                { matchNumber: 'asc' }
+              ]
             }
           },
           orderBy: {

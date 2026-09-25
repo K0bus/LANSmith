@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Trophy, Plus, Gamepad2, ArrowRight, X, Sparkles, CheckSquare, Square, Swords, ListOrdered, Pencil, Trash2, Share2, Copy, Check, ExternalLink, Radio } from 'lucide-vue-next'
+import { Trophy, Plus, Gamepad2, ArrowRight, X, Sparkles, CheckSquare, Square, Swords, ListOrdered, Pencil, Trash2, Share2, Copy, Check, ExternalLink, Radio, Shuffle } from 'lucide-vue-next'
 import type { ScoringType } from '~/shared/types'
 
 const { data: tournaments, pending, refresh } = await useFetch<any[]>('/api/tournaments')
@@ -9,6 +9,7 @@ const { data: availableGames } = await useFetch<any[]>('/api/games')
 interface SelectedGameItem {
   gameId: string
   scoringType: ScoringType
+  teamSize?: number
 }
 
 const isModalOpen = ref(false)
@@ -53,7 +54,8 @@ function openCreateModal() {
   editingTournamentId.value = null
   const initialGames: SelectedGameItem[] = (availableGames.value?.slice(0, 4) || []).map((g: any) => ({
     gameId: g.id,
-    scoringType: 'SCOREBOARD'
+    scoringType: 'SCOREBOARD',
+    teamSize: 1
   }))
 
   form.value = {
@@ -73,14 +75,16 @@ function openEditModal(t: any) {
     for (const tg of t.tournamentGames) {
       selectedGames.push({
         gameId: tg.gameId || tg.game?.id,
-        scoringType: (tg.scoringType || 'SCOREBOARD') as ScoringType
+        scoringType: (tg.scoringType || 'SCOREBOARD') as ScoringType,
+        teamSize: tg.teamSize || 1
       })
     }
   } else if (t.games && t.games.length > 0) {
     for (const g of t.games) {
       selectedGames.push({
         gameId: g.id,
-        scoringType: 'SCOREBOARD'
+        scoringType: 'SCOREBOARD',
+        teamSize: 1
       })
     }
   }
@@ -113,7 +117,8 @@ function toggleGameSelection(gameId: string) {
   } else {
     form.value.selectedGames.push({
       gameId,
-      scoringType: 'SCOREBOARD'
+      scoringType: 'SCOREBOARD',
+      teamSize: 1
     })
   }
 }
@@ -122,6 +127,16 @@ function setGameScoringType(gameId: string, type: ScoringType) {
   const item = form.value.selectedGames.find(g => g.gameId === gameId)
   if (item) {
     item.scoringType = type
+    if (type === 'ROUND_ROBIN' && !item.teamSize) {
+      item.teamSize = 1
+    }
+  }
+}
+
+function setGameTeamSize(gameId: string, size: number) {
+  const item = form.value.selectedGames.find(g => g.gameId === gameId)
+  if (item) {
+    item.teamSize = size
   }
 }
 
@@ -285,19 +300,27 @@ async function deleteTournament(tournament: any) {
                 class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 font-mono"
               >
                 <component 
-                  :is="tg.scoringType === 'WIN_LOSE' ? Swords : ListOrdered" 
+                  :is="tg.scoringType === 'WIN_LOSE' ? Swords : (tg.scoringType === 'ROUND_ROBIN' ? Shuffle : ListOrdered)" 
                   class="w-3.5 h-3.5 shrink-0"
-                  :class="tg.scoringType === 'WIN_LOSE' ? 'text-rose-400' : 'text-amber-400'"
+                  :class="{
+                    'text-rose-400': tg.scoringType === 'WIN_LOSE',
+                    'text-cyan-400': tg.scoringType === 'ROUND_ROBIN',
+                    'text-amber-400': tg.scoringType !== 'WIN_LOSE' && tg.scoringType !== 'ROUND_ROBIN'
+                  }"
                 />
                 <span class="truncate max-w-[130px] font-medium">{{ tg.game?.name || tg.name }}</span>
                 <span 
                   class="text-[10px] px-1 py-0.2 rounded font-bold"
-                  :class="tg.scoringType === 'WIN_LOSE' ? 'bg-rose-950 text-rose-300 border border-rose-800/50' : 'bg-amber-950 text-amber-300 border border-amber-800/50'"
+                  :class="{
+                    'bg-rose-950 text-rose-300 border border-rose-800/50': tg.scoringType === 'WIN_LOSE',
+                    'bg-cyan-950 text-cyan-300 border border-cyan-800/50': tg.scoringType === 'ROUND_ROBIN',
+                    'bg-amber-950 text-amber-300 border border-amber-800/50': tg.scoringType !== 'WIN_LOSE' && tg.scoringType !== 'ROUND_ROBIN'
+                  }"
                 >
-                  {{ tg.scoringType === 'WIN_LOSE' ? 'Gagnant/Perdant' : 'Scoreboard' }}
+                  {{ tg.scoringType === 'WIN_LOSE' ? 'Gagnant/Perdant' : (tg.scoringType === 'ROUND_ROBIN' ? 'Round-Robin' : 'Scoreboard') }}
                 </span>
-                <span v-if="tg.rounds?.length > 0" class="text-[10px] text-slate-400">
-                  ({{ tg.rounds.length }} m.)
+                <span v-if="tg.rounds?.length > 0 || tg.matches?.length > 0" class="text-[10px] text-slate-400">
+                  ({{ tg.scoringType === 'ROUND_ROBIN' ? `${tg.matches?.length || 0} matchs` : `${tg.rounds.length} m.` }})
                 </span>
               </div>
             </div>
@@ -438,12 +461,90 @@ async function deleteTournament(tournament: any) {
                         <Swords class="w-3.5 h-3.5" />
                         <span>Gagnant/Perdant</span>
                       </button>
+                      <button
+                        type="button"
+                        @click="setGameScoringType(game.id, 'ROUND_ROBIN')"
+                        class="px-2.5 py-1 rounded text-[11px] font-bold font-mono flex items-center gap-1 transition-all"
+                        :class="getGameConfig(game.id)?.scoringType === 'ROUND_ROBIN'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-white'"
+                        title="Tournoi Toutes Rondes (Round-Robin) avec calendrier officiel de confrontations"
+                      >
+                        <Shuffle class="w-3.5 h-3.5" />
+                        <span>Round-Robin</span>
+                      </button>
                     </div>
                   </div>
 
                   <!-- Details tip for win-lose if active -->
                   <div v-if="isGameSelected(game.id) && getGameConfig(game.id)?.scoringType === 'WIN_LOSE'" class="mt-2 text-[10px] font-mono text-rose-300/80 bg-rose-950/30 px-2.5 py-1 rounded border border-rose-900/40 flex items-center justify-between">
                     <span>⚔️ Mode Victoire/Défaite : les gagnants se partagent les points des perdants (L / W).</span>
+                  </div>
+
+                  <!-- Details tip for round-robin if active -->
+                  <div v-if="isGameSelected(game.id) && getGameConfig(game.id)?.scoringType === 'ROUND_ROBIN'" class="mt-2.5 p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-800/50 space-y-2">
+                    <div class="flex items-center justify-between text-[11px] font-mono text-cyan-300">
+                      <span class="font-bold flex items-center gap-1.5">
+                        <Shuffle class="w-3.5 h-3.5" />
+                        Format de confrontation :
+                      </span>
+                      <span class="text-[10px] text-cyan-400/80">
+                        {{ getGameConfig(game.id)?.teamSize === 1 ? '1v1 Solo' : `Équipes de ${getGameConfig(game.id)?.teamSize} (Équilibrage 1er+Dernier)` }}
+                      </span>
+                    </div>
+
+                    <!-- Team Size Selector Buttons -->
+                    <div class="grid grid-cols-4 gap-1.5">
+                      <button
+                        type="button"
+                        @click="setGameTeamSize(game.id, 1)"
+                        class="px-2 py-1.5 rounded text-[10px] font-mono font-bold transition-all text-center"
+                        :class="(getGameConfig(game.id)?.teamSize || 1) === 1
+                          ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(6,182,212,0.4)]'
+                          : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'"
+                      >
+                        👤 Solo (1v1)
+                      </button>
+                      <button
+                        type="button"
+                        @click="setGameTeamSize(game.id, 2)"
+                        class="px-2 py-1.5 rounded text-[10px] font-mono font-bold transition-all text-center"
+                        :class="getGameConfig(game.id)?.teamSize === 2
+                          ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
+                          : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'"
+                      >
+                        👥 Duos (2v2) ⚡
+                      </button>
+                      <button
+                        type="button"
+                        @click="setGameTeamSize(game.id, 3)"
+                        class="px-2 py-1.5 rounded text-[10px] font-mono font-bold transition-all text-center"
+                        :class="getGameConfig(game.id)?.teamSize === 3
+                          ? 'bg-gradient-to-r from-cyan-400 to-indigo-500 text-slate-950 font-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
+                          : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'"
+                      >
+                        👥 Trios (3v3)
+                      </button>
+                      <button
+                        type="button"
+                        @click="setGameTeamSize(game.id, 4)"
+                        class="px-2 py-1.5 rounded text-[10px] font-mono font-bold transition-all text-center"
+                        :class="getGameConfig(game.id)?.teamSize === 4
+                          ? 'bg-gradient-to-r from-cyan-400 to-purple-500 text-slate-950 font-black shadow-[0_0_10px_rgba(6,182,212,0.5)]'
+                          : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'"
+                      >
+                        🛡️ Squads (4v4)
+                      </button>
+                    </div>
+
+                    <p class="text-[10px] font-mono text-slate-400 leading-tight">
+                      <span v-if="(getGameConfig(game.id)?.teamSize || 1) === 1">
+                        Calendrier officiel complet : chacun affronte tous les autres joueurs en 1v1.
+                      </span>
+                      <span v-else>
+                        Les équipes sont automatiquement composées et équilibrées selon le classement global (1er avec dernier, 2e avec avant-dernier...).
+                      </span>
+                    </p>
                   </div>
                 </div>
               </div>

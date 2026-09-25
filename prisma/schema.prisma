@@ -14,8 +14,11 @@ model Participant {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   rig         Rig?
-  scores      TournamentScore[]
-  roundScores RoundScore[]
+  scores           TournamentScore[]
+  roundScores      RoundScore[]
+  matchesAsPlayer1 TournamentMatch[] @relation("Player1Matches")
+  matchesAsPlayer2 TournamentMatch[] @relation("Player2Matches")
+  tournamentTeams  TournamentTeam[]  @relation("TournamentTeamParticipants")
 }
 
 model Rig {
@@ -100,13 +103,32 @@ model TournamentGame {
   gameId       String
   game         Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
   
-  scoringType  String            @default("SCOREBOARD") // SCOREBOARD or WIN_LOSE
+  scoringType  String            @default("SCOREBOARD") // SCOREBOARD, WIN_LOSE, or ROUND_ROBIN
+  teamSize     Int               @default(1) // 1 = Solo (1v1), 2 = Duo (2v2), 3 = Trio, etc.
   order        Int               @default(0)
   
   rounds       TournamentRound[]
+  matches      TournamentMatch[]
+  teams        TournamentTeam[]
   createdAt    DateTime          @default(now())
 
   @@unique([tournamentId, gameId])
+}
+
+model TournamentTeam {
+  id               String            @id @default(cuid())
+  tournamentGameId String
+  tournamentGame   TournamentGame    @relation(fields: [tournamentGameId], references: [id], onDelete: Cascade)
+  
+  name             String            // e.g. "Duo #1"
+  seed             Int               @default(1)
+  
+  members          Participant[]     @relation("TournamentTeamParticipants")
+  
+  matchesAsTeam1   TournamentMatch[] @relation("Team1Matches")
+  matchesAsTeam2   TournamentMatch[] @relation("Team2Matches")
+  
+  createdAt        DateTime          @default(now())
 }
 
 model TournamentRound {
@@ -157,4 +179,39 @@ model TournamentScore {
 
   @@unique([tournamentId, participantId, gameId])
 }
+
+model TournamentMatch {
+  id               String          @id @default(cuid())
+  tournamentGameId String
+  tournamentGame   TournamentGame  @relation(fields: [tournamentGameId], references: [id], onDelete: Cascade)
+  
+  roundNumber      Int             @default(1) // Tour 1, 2...
+  matchNumber      Int             @default(1) // Match 1, 2...
+  
+  // For Solo mode (1v1)
+  player1Id        String?
+  player1          Participant?    @relation("Player1Matches", fields: [player1Id], references: [id], onDelete: Cascade)
+  player2Id        String?         // Null if BYE
+  player2          Participant?    @relation("Player2Matches", fields: [player2Id], references: [id], onDelete: Cascade)
+  
+  // For Team mode (Duo, Trio...)
+  team1Id          String?
+  team1            TournamentTeam? @relation("Team1Matches", fields: [team1Id], references: [id], onDelete: Cascade)
+  team2Id          String?         // Null if BYE
+  team2            TournamentTeam? @relation("Team2Matches", fields: [team2Id], references: [id], onDelete: Cascade)
+  
+  player1Score     Float?
+  player2Score     Float?
+  
+  winnerId         String?         // ID of winner player
+  winnerTeamId     String?         // ID of winner team
+  isDraw           Boolean         @default(false)
+  status           String          @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([tournamentGameId, roundNumber, matchNumber])
+}
+
 

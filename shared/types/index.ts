@@ -57,7 +57,7 @@ export interface ParticipantWithRig {
   } | null
 }
 
-export type ScoringType = 'SCOREBOARD' | 'WIN_LOSE'
+export type ScoringType = 'SCOREBOARD' | 'WIN_LOSE' | 'ROUND_ROBIN'
 
 export interface GameItem {
   id: string
@@ -90,14 +90,86 @@ export interface TournamentRoundItem {
   scores: RoundScoreItem[]
 }
 
+export interface TournamentTeamMemberItem {
+  id: string
+  nickname: string
+  avatarUrl?: string | null
+  rig?: { gpuName?: string } | null
+}
+
+export interface TournamentTeamItem {
+  id: string
+  tournamentGameId: string
+  name: string
+  seed: number
+  members: TournamentTeamMemberItem[]
+  createdAt?: string
+}
+
+export interface TournamentMatchItem {
+  id: string
+  tournamentGameId: string
+  roundNumber: number
+  matchNumber: number
+  player1Id?: string | null
+  player1?: {
+    id: string
+    nickname: string
+    avatarUrl?: string | null
+    rig?: { gpuName?: string } | null
+  } | null
+  player2Id?: string | null
+  player2?: {
+    id: string
+    nickname: string
+    avatarUrl?: string | null
+    rig?: { gpuName?: string } | null
+  } | null
+  team1Id?: string | null
+  team1?: TournamentTeamItem | null
+  team2Id?: string | null
+  team2?: TournamentTeamItem | null
+  player1Score?: number | null
+  player2Score?: number | null
+  winnerId?: string | null
+  winnerTeamId?: string | null
+  isDraw: boolean
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface RoundRobinStanding {
+  participantId?: string
+  participantName?: string
+  avatar?: string | null
+  seatNumber?: string | null
+  teamId?: string
+  teamName?: string
+  teamMembers?: TournamentTeamMemberItem[]
+  played: number
+  wins: number
+  draws: number
+  losses: number
+  scoreFor: number
+  scoreAgainst: number
+  scoreDiff: number
+  points: number
+  rank: number
+  tournamentPoints: number
+}
+
 export interface TournamentGameItem {
   id: string
   tournamentId: string
   gameId: string
   scoringType: ScoringType
+  teamSize?: number
   order: number
   game: GameItem
   rounds: TournamentRoundItem[]
+  matches?: TournamentMatchItem[]
+  teams?: TournamentTeamItem[]
 }
 
 export interface TournamentWithDetails {
@@ -129,5 +201,14 @@ export interface LeaderboardEntry {
       rawScore?: number | null
       points: number
     }[]
+    roundRobinStats?: {
+      played: number
+      wins: number
+      draws: number
+      losses: number
+      scoreDiff: number
+      rrPoints: number
+    }
   }>
 }
+

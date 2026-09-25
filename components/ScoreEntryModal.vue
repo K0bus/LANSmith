@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { Trophy, Save, X, Trash2, Plus, Swords, ListOrdered, Check, AlertCircle } from 'lucide-vue-next'
+import { Trophy, Save, X, Trash2, Plus, Swords, ListOrdered, Check, AlertCircle, Shuffle } from 'lucide-vue-next'
 import type { ScoringType } from '~/shared/types'
 
 const props = defineProps<{
@@ -13,6 +13,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'saved'): void
+  (e: 'openRoundRobin', gameId: string): void
 }>()
 
 const activeGameId = ref('')
@@ -302,25 +303,52 @@ async function deleteCurrentRound() {
               :key="tg.gameId || tg.id"
               type="button"
               @click="activeGameId = tg.gameId || tg.game?.id"
-              class="px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-2"
+              class="px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 cursor-pointer"
               :class="activeGameId === (tg.gameId || tg.game?.id)
                 ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.25)]' 
                 : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'"
             >
               <component 
-                :is="tg.scoringType === 'WIN_LOSE' ? Swords : ListOrdered" 
+                :is="tg.scoringType === 'WIN_LOSE' ? Swords : (tg.scoringType === 'ROUND_ROBIN' ? Shuffle : ListOrdered)" 
                 class="w-3.5 h-3.5"
-                :class="tg.scoringType === 'WIN_LOSE' ? 'text-rose-400' : 'text-amber-400'"
+                :class="{
+                  'text-rose-400': tg.scoringType === 'WIN_LOSE',
+                  'text-cyan-400': tg.scoringType === 'ROUND_ROBIN',
+                  'text-amber-400': tg.scoringType !== 'WIN_LOSE' && tg.scoringType !== 'ROUND_ROBIN'
+                }"
               />
               <span>{{ tg.game?.name || tg.name }}</span>
               <span 
                 class="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase"
-                :class="tg.scoringType === 'WIN_LOSE' ? 'bg-rose-950/80 text-rose-300 border border-rose-800' : 'bg-slate-800 text-slate-300'"
+                :class="{
+                  'bg-rose-950/80 text-rose-300 border border-rose-800': tg.scoringType === 'WIN_LOSE',
+                  'bg-cyan-950/80 text-cyan-300 border border-cyan-800': tg.scoringType === 'ROUND_ROBIN',
+                  'bg-slate-800 text-slate-300': tg.scoringType !== 'WIN_LOSE' && tg.scoringType !== 'ROUND_ROBIN'
+                }"
               >
-                {{ tg.scoringType === 'WIN_LOSE' ? 'Gagnant/Perdant' : 'Scoreboard' }}
+                {{ tg.scoringType === 'WIN_LOSE' ? 'Gagnant/Perdant' : (tg.scoringType === 'ROUND_ROBIN' ? 'Round-Robin' : 'Scoreboard') }}
               </span>
             </button>
           </div>
+        </div>
+
+        <!-- Banner for ROUND_ROBIN mode -->
+        <div v-if="activeScoringType === 'ROUND_ROBIN'" class="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <Shuffle class="w-5 h-5 text-cyan-400 shrink-0" />
+            <div>
+              <div class="text-xs font-bold text-white">Cette épreuve est configurée en mode Tournoi Round-Robin</div>
+              <div class="text-[11px] text-cyan-300/80 font-mono">Utilisez le générateur de calendrier officiel et la saisie match-par-match.</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            @click="emit('openRoundRobin', activeGameId)"
+            class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.3)] shrink-0"
+          >
+            <Shuffle class="w-4 h-4" />
+            <span>Ouvrir l'Espace Round-Robin</span>
+          </button>
         </div>
 
         <!-- Round Selector & Navigation Tabs -->
