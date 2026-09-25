@@ -481,6 +481,72 @@ async function deleteTournament(tournament: any) {
                     <span>⚔️ Mode Victoire/Défaite : les gagnants se partagent les points des perdants (L / W).</span>
                   </div>
 
+                  <!-- Details & format for SCOREBOARD -->
+                  <div v-if="isGameSelected(game.id) && getGameConfig(game.id)?.scoringType === 'SCOREBOARD'" class="mt-2.5 p-2.5 rounded-lg bg-amber-950/40 border border-amber-800/50 space-y-2">
+                    <div class="flex items-center justify-between text-[11px] font-mono text-amber-300">
+                      <span class="font-bold flex items-center gap-1.5">
+                        <ListOrdered class="w-3.5 h-3.5" />
+                        Format de l'épreuve :
+                      </span>
+                      <span class="text-[10px] text-amber-400/80">
+                        {{ (getGameConfig(game.id)?.teamSize || 1) === 1 ? '👤 Solo (Individuel)' : `👥 Équipes de ${getGameConfig(game.id)?.teamSize} (Équilibrage 1er+Dernier)` }}
+                      </span>
+                    </div>
+
+                    <!-- Team Size Selector Buttons -->
+                    <div class="grid grid-cols-4 gap-1.5">
+                      <button
+                        type="button"
+                        @click="setGameTeamSize(game.id, 1)"
+                        class="px-2 py-1.5 rounded text-[10px] font-mono font-bold transition-all text-center"
+                        :class="(getGameConfig(game.id)?.teamSize || 1) === 1
+                          ? 'bg-amber-500 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
+                          : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'"
+                      >
+                        👤 Solo
+                      </button>
+                      <button
+                        type="button"
+                        @click="setGameTeamSize(game.id, 2)"
+                        class="px-2 py-1.5 rounded text-[10px] font-mono font-bold transition-all text-center"
+                        :class="getGameConfig(game.id)?.teamSize === 2
+                          ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black shadow-[0_0_10px_rgba(245,158,11,0.5)]'
+                          : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'"
+                      >
+                        👥 Duos ⚡
+                      </button>
+                      <button
+                        type="button"
+                        @click="setGameTeamSize(game.id, 3)"
+                        class="px-2 py-1.5 rounded text-[10px] font-mono font-bold transition-all text-center"
+                        :class="getGameConfig(game.id)?.teamSize === 3
+                          ? 'bg-gradient-to-r from-amber-400 to-orange-600 text-slate-950 font-black shadow-[0_0_10px_rgba(245,158,11,0.5)]'
+                          : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'"
+                      >
+                        👥 Trios
+                      </button>
+                      <button
+                        type="button"
+                        @click="setGameTeamSize(game.id, 4)"
+                        class="px-2 py-1.5 rounded text-[10px] font-mono font-bold transition-all text-center"
+                        :class="getGameConfig(game.id)?.teamSize === 4
+                          ? 'bg-gradient-to-r from-amber-400 to-red-500 text-slate-950 font-black shadow-[0_0_10px_rgba(245,158,11,0.5)]'
+                          : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'"
+                      >
+                        🛡️ Squads
+                      </button>
+                    </div>
+
+                    <p class="text-[10px] font-mono text-slate-400 leading-tight">
+                      <span v-if="(getGameConfig(game.id)?.teamSize || 1) === 1">
+                        Attribution des points selon le rang individuel à chaque manche (1er, 2e, 3e...).
+                      </span>
+                      <span v-else>
+                        Équipes équilibrées selon le classement global (1er avec dernier, 2e avec avant-dernier...). Tous les coéquipiers reçoivent les points de leur équipe à chaque manche.
+                      </span>
+                    </p>
+                  </div>
+
                   <!-- Details tip for round-robin if active -->
                   <div v-if="isGameSelected(game.id) && getGameConfig(game.id)?.scoringType === 'ROUND_ROBIN'" class="mt-2.5 p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-800/50 space-y-2">
                     <div class="flex items-center justify-between text-[11px] font-mono text-cyan-300">
@@ -489,7 +555,7 @@ async function deleteTournament(tournament: any) {
                         Format de confrontation :
                       </span>
                       <span class="text-[10px] text-cyan-400/80">
-                        {{ getGameConfig(game.id)?.teamSize === 1 ? '1v1 Solo' : `Équipes de ${getGameConfig(game.id)?.teamSize} (Équilibrage 1er+Dernier)` }}
+                        {{ (getGameConfig(game.id)?.teamSize || 1) === 1 ? '1v1 Solo' : `Équipes de ${getGameConfig(game.id)?.teamSize} (Équilibrage 1er+Dernier)` }}
                       </span>
                     </div>
 

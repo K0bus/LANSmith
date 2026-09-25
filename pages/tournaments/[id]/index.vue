@@ -45,6 +45,20 @@ const leaderboard = computed(() => {
   })
 })
 
+const enrichedParticipants = computed(() => {
+  const list = participants.value || []
+  const lbMap = new Map((boardData.value?.leaderboard || []).map((entry: any) => [entry.participantId, entry]))
+
+  return list.map((p: any) => {
+    const entry: any = lbMap.get(p.id)
+    return {
+      ...p,
+      globalRank: entry?.globalRank || 999,
+      totalPoints: entry?.totalPoints || 0
+    }
+  })
+})
+
 const podium = computed(() => {
   return boardData.value?.podium || []
 })
@@ -396,7 +410,7 @@ function onScoresSaved() {
       :isOpen="isScoreModalOpen"
       :tournament="fullTournament"
       :selectedGameId="selectedGameId"
-      :participants="participants || []"
+      :participants="enrichedParticipants"
       @close="isScoreModalOpen = false"
       @saved="onScoresSaved"
       @openRoundRobin="(gId) => { isScoreModalOpen = false; openRoundRobinModal(gId) }"
@@ -407,7 +421,7 @@ function onScoresSaved() {
       :isOpen="isRoundRobinModalOpen"
       :tournament="fullTournament"
       :selectedGameId="selectedGameId"
-      :participants="participants || []"
+      :participants="enrichedParticipants"
       @close="isRoundRobinModalOpen = false"
       @saved="onScoresSaved"
     />

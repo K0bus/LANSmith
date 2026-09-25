@@ -5,7 +5,7 @@ import {
   Swords, X, RefreshCw, Sparkles, Check, AlertCircle, 
   Table, ListOrdered, Calendar, UserCheck, Flame, ChevronRight,
   Layers, Sliders, Dices, Award, Users, User, Shield, ArrowRightLeft,
-  Crown, Star, HeartHandshake
+  Crown, Star, HeartHandshake, Save, Zap
 } from 'lucide-vue-next'
 import type { ScoringType } from '~/shared/types'
 
@@ -275,8 +275,49 @@ const matrixItems = computed(() => {
   }
 })
 
-function getMatrixResult(id1: string, id2: string) {
-  if (id1 === id2) return { type: 'self' }
+function getItemDisplayName(item: any): string {
+  if (!item) return ''
+  if (isTeamMode.value) {
+    return item.teamName || item.name || 'Équipe'
+  }
+  return item.participantName || item.nickname || item.name || 'Joueur'
+}
+
+function getItemMemberNames(item: any): string[] {
+  if (!item) return []
+  if (isTeamMode.value) {
+    if (item.members && Array.isArray(item.members) && item.members.length > 0) {
+      return item.members.map((m: any) => m.nickname || m.name || 'Joueur')
+    }
+    if (item.memberNames && Array.isArray(item.memberNames) && item.memberNames.length > 0) {
+      return item.memberNames
+    }
+    // Fallback: search in currentTeams
+    const id = item.teamId || item.id
+    const team = currentTeams.value.find((t: any) => t.id === id)
+    if (team?.members) {
+      return team.members.map((m: any) => m.nickname || m.name || 'Joueur')
+    }
+  }
+  return [item.participantName || item.nickname || item.name || 'Joueur']
+}
+
+function getItemMembersString(item: any): string {
+  const names = getItemMemberNames(item)
+  return names.join(', ')
+}
+
+function getItemAvatar(item: any): string | null {
+  if (!item) return null
+  if (item.avatar || item.avatarUrl) return item.avatar || item.avatarUrl
+  if (isTeamMode.value && item.members && item.members[0]) {
+    return item.members[0].avatarUrl || item.members[0].avatar || null
+  }
+  return null
+}
+
+function getMatrixResult(id1: string, id2: string): { type: 'self' | 'none' | 'pending' | 'win' | 'loss' | 'draw', score?: string, round?: number, match?: any } {
+  if (id1 === id2) return { type: 'self', match: null }
   
   if (isTeamMode.value) {
     const match = matches.value.find(m => 
@@ -284,8 +325,8 @@ function getMatrixResult(id1: string, id2: string) {
       (m.team1Id === id2 && m.team2Id === id1)
     )
 
-    if (!match) return { type: 'none' }
-    if (match.status !== 'COMPLETED') return { type: 'pending', round: match.roundNumber }
+    if (!match) return { type: 'none', match: null }
+    if (match.status !== 'COMPLETED') return { type: 'pending', round: match.roundNumber, match }
 
     const isT1 = match.team1Id === id1
     const scoreFor = isT1 ? match.player1Score : match.player2Score
@@ -293,32 +334,83 @@ function getMatrixResult(id1: string, id2: string) {
     const winnerTeamId = match.winnerTeamId || (match.winnerId === id1 ? id1 : (match.winnerId === id2 ? id2 : null))
 
     if (match.isDraw) {
-      return { type: 'draw', score: `${scoreFor ?? 0}-${scoreAgainst ?? 0}`, round: match.roundNumber }
+      return { type: 'draw', score: `${scoreFor ?? 0}-${scoreAgainst ?? 0}`, round: match.roundNumber, match }
     }
     if (winnerTeamId === id1) {
-      return { type: 'win', score: `${scoreFor ?? 1}-${scoreAgainst ?? 0}`, round: match.roundNumber }
+      return { type: 'win', score: `${scoreFor ?? 1}-${scoreAgainst ?? 0}`, round: match.roundNumber, match }
     }
-    return { type: 'loss', score: `${scoreFor ?? 0}-${scoreAgainst ?? 1}`, round: match.roundNumber }
+    return { type: 'loss', score: `${scoreFor ?? 0}-${scoreAgainst ?? 1}`, round: match.roundNumber, match }
   } else {
     const match = matches.value.find(m => 
       (m.player1Id === id1 && m.player2Id === id2) || 
       (m.player1Id === id2 && m.player2Id === id1)
     )
 
-    if (!match) return { type: 'none' }
-    if (match.status !== 'COMPLETED') return { type: 'pending', round: match.roundNumber }
+    if (!match) return { type: 'none', match: null }
+    if (match.status !== 'COMPLETED') return { type: 'pending', round: match.roundNumber, match }
 
     const isP1 = match.player1Id === id1
     const scoreFor = isP1 ? match.player1Score : match.player2Score
     const scoreAgainst = isP1 ? match.player2Score : match.player1Score
 
     if (match.isDraw) {
-      return { type: 'draw', score: `${scoreFor ?? 0}-${scoreAgainst ?? 0}`, round: match.roundNumber }
+      return { type: 'draw', score: `${scoreFor ?? 0}-${scoreAgainst ?? 0}`, round: match.roundNumber, match }
     }
     if (match.winnerId === id1) {
-      return { type: 'win', score: `${scoreFor ?? 1}-${scoreAgainst ?? 0}`, round: match.roundNumber }
+      return { type: 'win', score: `${scoreFor ?? 1}-${scoreAgainst ?? 0}`, round: match.roundNumber, match }
     }
-    return { type: 'loss', score: `${scoreFor ?? 0}-${scoreAgainst ?? 1}`, round: match.roundNumber }
+    return { type: 'loss', score: `${scoreFor ?? 0}-${scoreAgainst ?? 1}`, round: match.roundNumber, match }
+  }
+}
+
+// Quick Match Score Entry State from Matrix
+const selectedQuickMatch = ref<any | null>(null)
+const isQuickMatchModalOpen = ref(false)
+const quickScore1 = ref<number | ''>('')
+const quickScore2 = ref<number | ''>('')
+const isSavingQuickMatch = ref(false)
+
+function onMatrixCellClick(id1: string, id2: string) {
+  const res = getMatrixResult(id1, id2)
+  if (res.match) {
+    openQuickMatchModal(res.match)
+  }
+}
+
+function openQuickMatchModal(match: any) {
+  selectedQuickMatch.value = match
+  quickScore1.value = match.player1Score !== null && match.player1Score !== undefined ? match.player1Score : ''
+  quickScore2.value = match.player2Score !== null && match.player2Score !== undefined ? match.player2Score : ''
+  isQuickMatchModalOpen.value = true
+}
+
+async function saveQuickMatchWinner(winner: 'p1' | 'p2' | 'draw' | 'reset') {
+  if (!selectedQuickMatch.value || !props.tournament?.id) return
+  isSavingQuickMatch.value = true
+  try {
+    await setMatchResult(selectedQuickMatch.value, winner)
+    isQuickMatchModalOpen.value = false
+  } catch (err: any) {
+    console.error('Erreur enregistrement match:', err)
+  } finally {
+    isSavingQuickMatch.value = false
+  }
+}
+
+async function saveQuickMatchCustomScore() {
+  if (!selectedQuickMatch.value || !props.tournament?.id) return
+  const match = selectedQuickMatch.value
+  match.player1Score = quickScore1.value !== '' ? Number(quickScore1.value) : 0
+  match.player2Score = quickScore2.value !== '' ? Number(quickScore2.value) : 0
+  
+  isSavingQuickMatch.value = true
+  try {
+    await updateMatchScores(match)
+    isQuickMatchModalOpen.value = false
+  } catch (err: any) {
+    console.error('Erreur enregistrement scores:', err)
+  } finally {
+    isSavingQuickMatch.value = false
   }
 }
 
@@ -1361,79 +1453,159 @@ async function resetMatches() {
           </div>
 
           <!-- TAB 3: MATRICE CROISÉE (CROSSTABLE GRID) -->
-          <div v-if="activeTab === 'matrix'" class="cyber-card p-5 border-slate-800">
-            <div class="flex items-center justify-between mb-4">
+          <div v-if="activeTab === 'matrix'" class="cyber-card p-5 border-slate-800 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div class="flex items-center gap-2">
                 <Table class="w-4 h-4 text-amber-400" />
                 <h4 class="text-sm font-bold text-white uppercase font-mono">
                   Matrice des Confrontations Croisées ({{ isTeamMode ? 'Équipe vs Équipe' : 'Joueur vs Joueur' }})
                 </h4>
               </div>
-              <div class="text-xs font-mono text-slate-400 flex items-center gap-3">
-                <span class="text-emerald-400 font-bold">V : Victoire</span>
-                <span class="text-amber-400 font-bold">N : Nul</span>
-                <span class="text-rose-400 font-bold">D : Défaite</span>
+              <div class="text-xs font-mono text-slate-400 flex flex-wrap items-center gap-3">
+                <span class="text-emerald-400 font-bold flex items-center gap-1">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span> V : Victoire
+                </span>
+                <span class="text-amber-400 font-bold flex items-center gap-1">
+                  <span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> N : Nul
+                </span>
+                <span class="text-rose-400 font-bold flex items-center gap-1">
+                  <span class="w-2 h-2 rounded-full bg-rose-400 inline-block"></span> D : Défaite
+                </span>
+                <span class="text-cyan-300 font-bold flex items-center gap-1">
+                  <Zap class="w-3 h-3 text-cyan-400" /> Cliquer sur un match pour saisir le score
+                </span>
               </div>
             </div>
 
-            <div class="overflow-x-auto">
-              <table class="w-full text-center font-mono text-xs border-collapse">
+            <div class="overflow-x-auto pb-2 scrollbar-thin">
+              <table class="w-full text-center font-mono text-xs border-collapse min-w-[650px]">
                 <thead>
-                  <tr class="border-b border-slate-800">
-                    <th class="p-2 text-left text-slate-400 text-[10px] uppercase min-w-[140px]">
-                      {{ isTeamMode ? 'Équipe \\ Adv' : 'Joueur \\ Adv' }}
+                  <tr class="border-b border-slate-800 bg-slate-950/60">
+                    <th class="p-3 text-left text-slate-400 text-[10px] uppercase min-w-[180px] sticky left-0 bg-slate-950/95 z-10">
+                      {{ isTeamMode ? 'Équipes \\ Adversaires' : 'Joueurs \\ Adversaires' }}
                     </th>
                     <th 
                       v-for="(item, idx) in matrixItems" 
                       :key="item.teamId || item.participantId || item.id"
-                      class="p-2 text-slate-300 text-[10px] uppercase font-bold min-w-[48px]"
-                      :title="item.teamName || item.participantName || item.name || item.nickname"
+                      class="p-2.5 text-slate-300 text-[10px] uppercase font-bold min-w-[70px] max-w-[110px]"
+                      :title="`${getItemDisplayName(item)} : ${getItemMembersString(item)}`"
                     >
-                      #{{ idx + 1 }}
+                      <div class="flex flex-col items-center gap-1">
+                        <span class="px-1.5 py-0.2 rounded bg-slate-900 border border-slate-700 text-amber-400 font-mono font-black text-[10px]">
+                          #{{ idx + 1 }}
+                        </span>
+
+                        <!-- Solo Player Header -->
+                        <template v-if="!isTeamMode">
+                          <img 
+                            :src="getItemAvatar(item) || `https://api.dicebear.com/7.x/bottts/svg?seed=${getItemDisplayName(item)}`" 
+                            class="w-5 h-5 rounded-full bg-slate-900 border border-slate-800 object-cover" 
+                          />
+                          <span class="text-[11px] font-bold text-white truncate max-w-[75px] block">
+                            {{ getItemDisplayName(item) }}
+                          </span>
+                        </template>
+
+                        <!-- Team Header -->
+                        <template v-else>
+                          <span class="text-[10px] font-bold text-cyan-300 truncate max-w-[85px] block">
+                            {{ getItemDisplayName(item) }}
+                          </span>
+                          <span class="text-[9px] text-slate-400 font-normal truncate max-w-[85px] block" :title="getItemMembersString(item)">
+                            {{ getItemMembersString(item) }}
+                          </span>
+                        </template>
+                      </div>
                     </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/60">
-                  <tr v-for="(item1, idx1) in matrixItems" :key="item1.teamId || item1.participantId || item1.id" class="hover:bg-slate-800/30">
-                    <td class="p-2 text-left flex items-center gap-2 font-bold text-white truncate">
-                      <span class="text-[10px] text-amber-400">#{{ idx1 + 1 }}</span>
-                      <span class="truncate">{{ item1.teamName || item1.participantName || item1.name || item1.nickname }}</span>
+                  <tr 
+                    v-for="(item1, idx1) in matrixItems" 
+                    :key="item1.teamId || item1.participantId || item1.id" 
+                    class="hover:bg-slate-800/30 transition-colors"
+                  >
+                    <!-- Row Header Left -->
+                    <td class="p-2.5 text-left sticky left-0 bg-slate-950/95 z-10 border-r border-slate-850">
+                      <div class="flex items-center gap-2.5">
+                        <span class="text-[10px] font-black font-mono text-amber-400 shrink-0">
+                          #{{ idx1 + 1 }}
+                        </span>
+
+                        <!-- Solo Row Info -->
+                        <template v-if="!isTeamMode">
+                          <img 
+                            :src="getItemAvatar(item1) || `https://api.dicebear.com/7.x/bottts/svg?seed=${getItemDisplayName(item1)}`" 
+                            class="w-6 h-6 rounded-full bg-slate-900 border border-slate-800 shrink-0 object-cover" 
+                          />
+                          <span class="font-bold text-white text-xs truncate max-w-[130px]">
+                            {{ getItemDisplayName(item1) }}
+                          </span>
+                        </template>
+
+                        <!-- Team Row Info -->
+                        <template v-else>
+                          <div class="min-w-0">
+                            <div class="font-bold text-cyan-300 text-xs truncate">
+                              {{ getItemDisplayName(item1) }}
+                            </div>
+                            <div class="text-[10px] text-slate-400 font-normal truncate max-w-[140px]" :title="getItemMembersString(item1)">
+                              {{ getItemMembersString(item1) }}
+                            </div>
+                          </div>
+                        </template>
+                      </div>
                     </td>
+
+                    <!-- Cells (Match Results) -->
                     <td 
                       v-for="(item2, idx2) in matrixItems" 
                       :key="item2.teamId || item2.participantId || item2.id"
                       class="p-1.5"
                     >
+                      <!-- Diagonal Self -->
                       <div 
                         v-if="idx1 === idx2" 
-                        class="w-full h-8 bg-slate-900/90 rounded border border-slate-800/60 flex items-center justify-center text-slate-700"
+                        class="w-full h-9 bg-slate-900/90 rounded-lg border border-slate-800/60 flex items-center justify-center text-slate-700 font-black text-sm"
                       >
                         &times;
                       </div>
-                      <div 
+
+                      <!-- Match Cell -->
+                      <button
                         v-else 
-                        class="w-full h-8 rounded flex items-center justify-center font-bold text-[11px] border"
+                        type="button"
+                        @click="onMatrixCellClick(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id)"
+                        class="w-full h-9 rounded-lg flex items-center justify-center font-bold text-xs border transition-all cursor-pointer group hover:scale-105 hover:shadow-[0_0_15px_rgba(245,158,11,0.25)] relative"
                         :class="{
-                          'bg-emerald-950/60 border-emerald-500/50 text-emerald-300': getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'win',
-                          'bg-rose-950/60 border-rose-500/50 text-rose-300': getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'loss',
-                          'bg-amber-950/60 border-amber-500/50 text-amber-300': getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'draw',
-                          'bg-slate-950 border-slate-800 text-slate-600': getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'pending' || getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'none'
+                          'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:border-emerald-400': getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'win',
+                          'bg-rose-950/60 border-rose-500/50 text-rose-300 hover:border-rose-400': getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'loss',
+                          'bg-amber-950/60 border-amber-500/50 text-amber-300 hover:border-amber-400': getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'draw',
+                          'bg-slate-950 border-slate-800 text-slate-500 hover:border-cyan-500/60 hover:text-cyan-300 hover:bg-cyan-950/20': getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'pending' || getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'none'
                         }"
-                        :title="`Match T${getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).round || '?'}`"
+                        :title="`Match Tour ${getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).round || '?'} : Cliquer pour saisir ou modifier le score`"
                       >
+                        <!-- Win -->
                         <span v-if="getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'win'">
-                          V <span class="text-[9px] font-normal opacity-80">{{ getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).score }}</span>
+                          V <span class="text-[10px] font-normal opacity-85 ml-0.5">{{ getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).score }}</span>
                         </span>
+
+                        <!-- Loss -->
                         <span v-else-if="getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'loss'">
-                          D <span class="text-[9px] font-normal opacity-80">{{ getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).score }}</span>
+                          D <span class="text-[10px] font-normal opacity-85 ml-0.5">{{ getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).score }}</span>
                         </span>
+
+                        <!-- Draw -->
                         <span v-else-if="getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).type === 'draw'">
-                          N <span class="text-[9px] font-normal opacity-80">{{ getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).score }}</span>
+                          N <span class="text-[10px] font-normal opacity-85 ml-0.5">{{ getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).score }}</span>
                         </span>
-                        <span v-else class="text-[10px] text-slate-600">
-                          -
+
+                        <!-- Pending / Non-played -->
+                        <span v-else class="text-[11px] group-hover:text-cyan-400 flex items-center gap-0.5 opacity-60 group-hover:opacity-100">
+                          <span>T{{ getMatrixResult(item1.teamId || item1.participantId || item1.id, item2.teamId || item2.participantId || item2.id).round || '?' }}</span>
+                          <Zap class="w-2.5 h-2.5 hidden group-hover:inline-block" />
                         </span>
-                      </div>
+                      </button>
                     </td>
                   </tr>
                 </tbody>
@@ -1495,5 +1667,212 @@ async function resetMatches() {
         </button>
       </div>
     </div>
+
+    <!-- QUICK MATCH SCORE MODAL (CLICKED FROM MATRIX OR MATCH CARDS) -->
+    <Teleport to="body">
+      <div 
+        v-if="isQuickMatchModalOpen && selectedQuickMatch"
+        class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto"
+        @click.self="isQuickMatchModalOpen = false"
+      >
+        <div class="cyber-card p-6 border-amber-500/50 bg-slate-900 max-w-lg w-full space-y-6 shadow-2xl relative">
+          <!-- Header -->
+          <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                <Swords class="w-4 h-4" />
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-white font-mono">
+                  Saisie du Résultat de Match
+                </h3>
+                <p class="text-xs font-mono text-slate-400">
+                  Tour {{ selectedQuickMatch.roundNumber }} &bull; Match #{{ selectedQuickMatch.matchNumber }}
+                </p>
+              </div>
+            </div>
+
+            <button 
+              @click="isQuickMatchModalOpen = false"
+              class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+            >
+              <X class="w-5 h-5" />
+            </button>
+          </div>
+
+          <!-- Match Faceoff Card -->
+          <div class="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+            <div class="grid grid-cols-2 gap-4 items-center">
+              
+              <!-- Side 1: Player / Team 1 -->
+              <div 
+                class="p-3 rounded-xl border flex flex-col items-center text-center space-y-2 transition-all"
+                :class="(selectedQuickMatch.winnerId === selectedQuickMatch.player1Id || selectedQuickMatch.winnerTeamId === selectedQuickMatch.team1Id)
+                  ? 'bg-emerald-950/40 border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                  : 'bg-slate-900 border-slate-800'"
+              >
+                <!-- Avatar / Member Avatars -->
+                <div class="flex items-center justify-center -space-x-2">
+                  <template v-if="selectedQuickMatch.team1?.members?.length > 0">
+                    <img 
+                      v-for="m in selectedQuickMatch.team1.members" 
+                      :key="m.id"
+                      :src="m.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${m.nickname}`" 
+                      class="w-8 h-8 rounded-full border-2 border-slate-950 object-cover bg-slate-900" 
+                    />
+                  </template>
+                  <template v-else>
+                    <img 
+                      :src="selectedQuickMatch.player1?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${selectedQuickMatch.player1?.nickname || '1'}`" 
+                      class="w-10 h-10 rounded-full border border-slate-700 object-cover bg-slate-900" 
+                    />
+                  </template>
+                </div>
+
+                <div>
+                  <div class="font-bold text-white text-sm font-mono truncate max-w-[140px]">
+                    {{ selectedQuickMatch.team1 ? selectedQuickMatch.team1.name : selectedQuickMatch.player1?.nickname }}
+                  </div>
+                  <div v-if="selectedQuickMatch.team1?.members" class="text-[10px] text-slate-400 font-mono truncate max-w-[140px]">
+                    {{ selectedQuickMatch.team1.members.map((m: any) => m.nickname).join(', ') }}
+                  </div>
+                </div>
+
+                <!-- Custom Score Input 1 -->
+                <div class="w-full pt-1">
+                  <label class="block text-[10px] font-mono text-slate-400 mb-1">Score :</label>
+                  <input 
+                    v-model.number="quickScore1"
+                    @keyup.enter="saveQuickMatchCustomScore"
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    class="w-20 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono font-bold text-center text-sm focus:border-amber-500 mx-auto block"
+                  />
+                </div>
+              </div>
+
+              <!-- Side 2: Player / Team 2 -->
+              <div 
+                class="p-3 rounded-xl border flex flex-col items-center text-center space-y-2 transition-all"
+                :class="(selectedQuickMatch.winnerId === selectedQuickMatch.player2Id || selectedQuickMatch.winnerTeamId === selectedQuickMatch.team2Id)
+                  ? 'bg-emerald-950/40 border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                  : 'bg-slate-900 border-slate-800'"
+              >
+                <!-- Avatar / Member Avatars -->
+                <div class="flex items-center justify-center -space-x-2">
+                  <template v-if="selectedQuickMatch.team2?.members?.length > 0">
+                    <img 
+                      v-for="m in selectedQuickMatch.team2.members" 
+                      :key="m.id"
+                      :src="m.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${m.nickname}`" 
+                      class="w-8 h-8 rounded-full border-2 border-slate-950 object-cover bg-slate-900" 
+                    />
+                  </template>
+                  <template v-else>
+                    <img 
+                      :src="selectedQuickMatch.player2?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${selectedQuickMatch.player2?.nickname || '2'}`" 
+                      class="w-10 h-10 rounded-full border border-slate-700 object-cover bg-slate-900" 
+                    />
+                  </template>
+                </div>
+
+                <div>
+                  <div class="font-bold text-white text-sm font-mono truncate max-w-[140px]">
+                    {{ selectedQuickMatch.team2 ? selectedQuickMatch.team2.name : selectedQuickMatch.player2?.nickname }}
+                  </div>
+                  <div v-if="selectedQuickMatch.team2?.members" class="text-[10px] text-slate-400 font-mono truncate max-w-[140px]">
+                    {{ selectedQuickMatch.team2.members.map((m: any) => m.nickname).join(', ') }}
+                  </div>
+                </div>
+
+                <!-- Custom Score Input 2 -->
+                <div class="w-full pt-1">
+                  <label class="block text-[10px] font-mono text-slate-400 mb-1">Score :</label>
+                  <input 
+                    v-model.number="quickScore2"
+                    @keyup.enter="saveQuickMatchCustomScore"
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    class="w-20 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono font-bold text-center text-sm focus:border-amber-500 mx-auto block"
+                  />
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Quick 1-Click Outcome Buttons -->
+            <div class="pt-3 border-t border-slate-800">
+              <label class="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-2 text-center">
+                Résultat Rapide (1-Clic) :
+              </label>
+              <div class="grid grid-cols-4 gap-2 font-mono text-xs font-bold">
+                <button
+                  type="button"
+                  @click="saveQuickMatchWinner('p1')"
+                  :disabled="isSavingQuickMatch"
+                  class="p-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-center transition-all disabled:opacity-50 cursor-pointer"
+                  :title="`Victoire ${selectedQuickMatch.team1 ? selectedQuickMatch.team1.name : (selectedQuickMatch.player1?.nickname || '1')}`"
+                >
+                  🏆 {{ selectedQuickMatch.team1 ? selectedQuickMatch.team1.name : (selectedQuickMatch.player1?.nickname || 'Victoire 1') }}
+                </button>
+
+                <button
+                  type="button"
+                  @click="saveQuickMatchWinner('draw')"
+                  :disabled="isSavingQuickMatch"
+                  class="p-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-center transition-all disabled:opacity-50 cursor-pointer"
+                  title="Match Nul (1 pt chacun)"
+                >
+                  🤝 Nul
+                </button>
+
+                <button
+                  type="button"
+                  @click="saveQuickMatchWinner('p2')"
+                  :disabled="isSavingQuickMatch"
+                  class="p-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-center transition-all disabled:opacity-50 cursor-pointer"
+                  :title="`Victoire ${selectedQuickMatch.team2 ? selectedQuickMatch.team2.name : (selectedQuickMatch.player2?.nickname || '2')}`"
+                >
+                  🏆 {{ selectedQuickMatch.team2 ? selectedQuickMatch.team2.name : (selectedQuickMatch.player2?.nickname || 'Victoire 2') }}
+                </button>
+
+                <button
+                  type="button"
+                  @click="saveQuickMatchWinner('reset')"
+                  :disabled="isSavingQuickMatch"
+                  class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 text-center transition-all disabled:opacity-50 cursor-pointer"
+                  title="Réinitialiser ce match"
+                >
+                  🔄 Reset
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Modal Actions -->
+          <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+            <button
+              type="button"
+              @click="isQuickMatchModalOpen = false"
+              class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+            >
+              Annuler
+            </button>
+
+            <button
+              type="button"
+              @click="saveQuickMatchCustomScore"
+              :disabled="isSavingQuickMatch || quickScore1 === '' || quickScore2 === ''"
+              class="px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.3)] transition-all disabled:opacity-50 flex items-center gap-2"
+            >
+              <Save class="w-4 h-4" />
+              <span>{{ isSavingQuickMatch ? 'Enregistrement...' : 'Valider les Scores' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

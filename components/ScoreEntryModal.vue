@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { Trophy, Save, X, Trash2, Plus, Swords, ListOrdered, Check, AlertCircle, Shuffle } from 'lucide-vue-next'
+import { Trophy, Save, X, Trash2, Plus, Swords, ListOrdered, Check, AlertCircle, Shuffle, Users, Sparkles, RefreshCw, Zap } from 'lucide-vue-next'
 import type { ScoringType } from '~/shared/types'
+import { generateBalancedTeams } from '~/server/utils/roundRobin'
 
 const props = defineProps<{
   isOpen: boolean
@@ -21,6 +22,7 @@ const selectedRoundId = ref<string | null>(null) // null = creating a new round
 const roundName = ref('')
 const isSubmitting = ref(false)
 const isDeleting = ref(false)
+const isGeneratingTeams = ref(false)
 const errorMessage = ref('')
 
 interface ParticipantRow {
@@ -36,7 +38,26 @@ interface ParticipantRow {
   points: number
 }
 
+interface TeamMember {
+  id: string
+  nickname: string
+  avatarUrl?: string | null
+  globalRank?: number
+  totalPoints?: number
+}
+
+interface TeamRow {
+  id: string
+  name: string
+  seed: number
+  members: TeamMember[]
+  rank: number | ''
+  rawScore: number | ''
+  points: number
+}
+
 const rows = ref<ParticipantRow[]>([])
+const teamRows = ref<TeamRow[]>([])
 
 // List of games in tournament
 const tournamentGames = computed(() => {
@@ -49,9 +70,11 @@ const tournamentGames = computed(() => {
     tournamentId: props.tournament.id,
     gameId: g.id,
     scoringType: 'SCOREBOARD' as ScoringType,
+    teamSize: 1,
     order: idx + 1,
     game: g,
-    rounds: []
+    rounds: [],
+    teams: []
   }))
 })
 
@@ -62,6 +85,14 @@ const activeTournamentGame = computed(() => {
 
 const activeScoringType = computed<ScoringType>(() => {
   return activeTournamentGame.value?.scoringType || 'SCOREBOARD'
+})
+
+const teamSize = computed<number>(() => {
+  return activeTournamentGame.value?.teamSize || 1
+})
+
+const isTeamMode = computed<boolean>(() => {
+  return activeScoringType.value === 'SCOREBOARD' && (teamSize.value > 1 || (activeTournamentGame.value?.teams && activeTournamentGame.value.teams.length > 0))
 })
 
 // Rounds for active game
@@ -83,6 +114,19 @@ const winLossStats = computed(() => {
     losersCount,
     pointsPerWinner
   }
+})
+
+// Participant standings map (from props or tournament if available)
+const participantStandingsMap = computed(() => {
+  const map = new Map<string, { globalRank: number, totalPoints: number }>()
+  for (let i = 0; i < (props.participants || []).length; i++) {
+    const p = props.participants[i]
+    map.set(p.id, {
+      globalRank: p.globalRank || (i + 1),
+      totalPoints: p.totalPoints || 0
+    })
+  }
+  return map
 })
 
 watch(() => props.isOpen, (open) => {
@@ -156,7 +200,164 @@ function initRows() {
     }))
   }
 
+  // Handle Teams if in team mode
+  if (isTeamMode.value) {
+    initTeamRows(currentRound)
+  }
+
   recalculatePoints()
+}
+
+function initTeamRows(currentRound?: any) {
+  const tg = activeTournamentGame.value
+  const existingTeams = tg?.teams || []
+
+  const scoreMap = currentRound ? new Map((currentRound.scores || []).map((s: any) => [s.participantId, s])) : new Map()
+
+  if (existingTeams.length > 0) {
+    teamRows.value = existingTeams.map((t: any) => {
+      const members: TeamMember[] = (t.members || []).map((m: any) => {
+        const stats = participantStandingsMap.value.get(m.id)
+        return {
+          id: m.id,
+          nickname: m.nickname || m.name || 'Joueur',
+          avatarUrl: m.avatarUrl || m.avatar,
+          globalRank: stats?.globalRank,
+          totalPoints: stats?.totalPoints
+        }
+      })
+
+      // Get existing rank & score from first member with data
+      let rank: number | '' = ''
+      let rawScore: number | '' = ''
+      let points = 0
+
+      for (const m of members) {
+        const s: any = scoreMap.get(m.id)
+        if (s) {
+          if (s.rank !== undefined && s.rank !== null) rank = s.rank
+          if (s.rawScore !== undefined && s.rawScore !== null) rawScore = s.rawScore
+          if (s.points !== undefined && s.points !== null) points = s.points
+          break
+        }
+      }
+
+      return {
+        id: t.id,
+        name: t.name,
+        seed: t.seed,
+        members,
+        rank,
+        rawScore,
+        points
+      }
+    })
+  } else {
+    // Auto-generate balanced teams in memory
+    autoBalanceTeamsInMemory()
+  }
+}
+
+function autoBalanceTeamsInMemory(shuffle = false) {
+  if (!props.participants || props.participants.length === 0) return
+
+  let participantList = [...props.participants]
+
+  if (!shuffle) {
+    // Sort by leaderboard points / rank (1st to last)
+    participantList.sort((a, b) => {
+      const statsA = participantStandingsMap.value.get(a.id)?.totalPoints ?? 0
+      const statsB = participantStandingsMap.value.get(b.id)?.totalPoints ?? 0
+      if (statsB !== statsA) return statsB - statsA
+      return (a.nickname || '').localeCompare(b.nickname || '')
+    })
+  } else {
+    participantList.sort(() => Math.random() - 0.5)
+  }
+
+  const pIds = participantList.map(p => p.id)
+  const prefix = teamSize.value === 2 ? 'Duo' : (teamSize.value === 3 ? 'Trio' : 'Équipe')
+  const generated = generateBalancedTeams(pIds, teamSize.value, prefix)
+
+  const pMap = new Map(props.participants.map(p => [p.id, p]))
+
+  teamRows.value = generated.map(t => {
+    const members: TeamMember[] = t.memberIds.map(mId => {
+      const p = pMap.get(mId)
+      const stats = participantStandingsMap.value.get(mId)
+      return {
+        id: mId,
+        nickname: p?.nickname || p?.name || 'Joueur',
+        avatarUrl: p?.avatarUrl || p?.avatar,
+        globalRank: stats?.globalRank,
+        totalPoints: stats?.totalPoints
+      }
+    })
+
+    return {
+      id: t.id,
+      name: t.name,
+      seed: t.seed,
+      members,
+      rank: '',
+      rawScore: '',
+      points: 0
+    }
+  })
+
+  syncRowsFromTeams()
+}
+
+async function balanceTeamsAndSaveToDb(shuffle = false) {
+  if (!activeGameId.value || !props.tournament) return
+
+  isGeneratingTeams.value = true
+  errorMessage.value = ''
+
+  try {
+    const res: any = await $fetch(`/api/tournaments/${props.tournament.id}/teams/generate`, {
+      method: 'POST',
+      body: {
+        gameId: activeGameId.value,
+        teamSize: teamSize.value,
+        autoBalance: !shuffle,
+        shuffle,
+        saveToDb: true
+      }
+    })
+
+    if (res.teams) {
+      teamRows.value = res.teams.map((t: any) => {
+        const members: TeamMember[] = (t.members || []).map((m: any) => {
+          const stats = participantStandingsMap.value.get(m.id)
+          return {
+            id: m.id,
+            nickname: m.nickname || m.name || 'Joueur',
+            avatarUrl: m.avatarUrl || m.avatar,
+            globalRank: stats?.globalRank,
+            totalPoints: stats?.totalPoints
+          }
+        })
+
+        return {
+          id: t.id,
+          name: t.name,
+          seed: t.seed,
+          members,
+          rank: '',
+          rawScore: '',
+          points: 0
+        }
+      })
+
+      syncRowsFromTeams()
+      recalculatePoints()
+    }
+  } catch (err: any) {
+    errorMessage.value = err.data?.statusMessage || 'Erreur lors de la génération des équipes.'
+  } finally {
+    isGeneratingTeams.value = false
+  }
 }
 
 function selectRound(roundId: string | null) {
@@ -184,6 +385,58 @@ function onRankChange(row: ParticipantRow) {
   recalculatePoints()
 }
 
+function onTeamRankChange(team: TeamRow) {
+  recalculatePoints()
+}
+
+function setTeamRank(team: TeamRow, rankValue: number) {
+  team.rank = team.rank === rankValue ? '' : rankValue
+  recalculatePoints()
+}
+
+function autoRankTeamsByRawScore() {
+  // Sort teams with rawScore descending
+  const scoredTeams = teamRows.value.filter(t => t.rawScore !== '')
+  scoredTeams.sort((a, b) => Number(b.rawScore) - Number(a.rawScore))
+
+  let rank = 1
+  for (let i = 0; i < scoredTeams.length; i++) {
+    if (i > 0 && Number(scoredTeams[i].rawScore) < Number(scoredTeams[i - 1].rawScore)) {
+      rank = i + 1
+    }
+    scoredTeams[i].rank = rank
+  }
+
+  recalculatePoints()
+}
+
+function syncRowsFromTeams() {
+  const rowMap = new Map(rows.value.map(r => [r.participantId, r]))
+
+  for (const team of teamRows.value) {
+    for (const m of team.members) {
+      let r = rowMap.get(m.id)
+      if (!r) {
+        r = {
+          participantId: m.id,
+          participantName: m.nickname,
+          avatar: m.avatarUrl || null,
+          isWinner: null,
+          rank: team.rank,
+          rawScore: team.rawScore,
+          points: team.points
+        }
+        rows.value.push(r)
+        rowMap.set(m.id, r)
+      } else {
+        r.rank = team.rank
+        r.rawScore = team.rawScore
+        r.points = team.points
+      }
+    }
+  }
+}
+
 function recalculatePoints() {
   if (activeScoringType.value === 'WIN_LOSE') {
     const winners = rows.value.filter(r => r.isWinner === true)
@@ -195,8 +448,19 @@ function recalculatePoints() {
     for (const r of rows.value) {
       r.points = r.isWinner ? pts : 0
     }
+  } else if (isTeamMode.value) {
+    // Scoreboard in Team Mode
+    for (const t of teamRows.value) {
+      if (t.rank !== '' && Number(t.rank) > 0) {
+        const idx = Number(t.rank) - 1
+        t.points = scoringRules.value[idx] ?? 0
+      } else {
+        t.points = 0
+      }
+    }
+    syncRowsFromTeams()
   } else {
-    // Scoreboard
+    // Scoreboard Solo
     for (const r of rows.value) {
       if (r.rank !== '' && Number(r.rank) > 0) {
         const idx = Number(r.rank) - 1
@@ -218,6 +482,10 @@ async function saveRound() {
   errorMessage.value = ''
 
   try {
+    if (isTeamMode.value) {
+      syncRowsFromTeams()
+    }
+
     const payload = {
       gameId: activeGameId.value,
       roundId: selectedRoundId.value || undefined,
@@ -468,19 +736,177 @@ async function deleteCurrentRound() {
           </div>
         </div>
 
+        <!-- TEAM MODE HEADER & ACTION CONTROLS -->
+        <div v-if="isTeamMode" class="mt-3 p-3 rounded-xl bg-gradient-to-r from-amber-950/40 via-slate-950 to-slate-950 border border-amber-500/40 space-y-3">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-mono">
+            <div class="flex items-center gap-2 text-amber-300 font-bold">
+              <Users class="w-4 h-4 text-amber-400" />
+              <span>Format Équipes ({{ teamSize === 2 ? 'Duos 2v2' : (teamSize === 3 ? 'Trios 3v3' : `Squads ${teamSize}v${teamSize}`) }})</span>
+              <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px]">
+                ⚡ Équilibrage 1er + Dernier
+              </span>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                @click="balanceTeamsAndSaveToDb(false)"
+                :disabled="isGeneratingTeams"
+                class="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-mono font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                title="Équilibrer les équipes selon le classement général (1er avec dernier, 2e avec avant-dernier...)"
+              >
+                <Sparkles class="w-3.5 h-3.5 text-amber-400" />
+                <span>{{ isGeneratingTeams ? 'Calcul...' : 'Équilibrer (1er + Dernier)' }}</span>
+              </button>
+
+              <button
+                type="button"
+                @click="balanceTeamsAndSaveToDb(true)"
+                :disabled="isGeneratingTeams"
+                class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-mono flex items-center gap-1 transition-all disabled:opacity-50"
+                title="Tirer les équipes au sort"
+              >
+                <Shuffle class="w-3.5 h-3.5" />
+                <span>Aléatoire</span>
+              </button>
+
+              <button
+                type="button"
+                @click="autoRankTeamsByRawScore"
+                class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono flex items-center gap-1 transition-all"
+                title="Calculer les rangs à partir du score brut de chaque équipe"
+              >
+                <Zap class="w-3.5 h-3.5 text-amber-400" />
+                <span>Classer par score</span>
+              </button>
+            </div>
+          </div>
+
+          <p class="text-[11px] font-mono text-slate-400">
+            Chaque coéquipier recevra automatiquement le nombre de points attribué au rang de son équipe pour cette manche.
+          </p>
+        </div>
+
         <!-- Information rule note about Tournament Scale on final Game Rank -->
-        <div class="mt-2.5 px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800/80 text-[11px] font-mono text-slate-400 flex items-center justify-between">
+        <div v-if="!isTeamMode" class="mt-2.5 px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800/80 text-[11px] font-mono text-slate-400 flex items-center justify-between">
           <span class="text-amber-400 font-bold flex items-center gap-1">
             <Trophy class="w-3.5 h-3.5" />
             <span>Score Final du Jeu :</span>
           </span>
           <span class="text-slate-300">
-            Total des manches $\rightarrow$ Classement du jeu $\rightarrow$ Barème du tournoi ($1^{\text{er}}=10\text{pts}, 2^{\text{e}}=8\text{pts}\dots$)
+            Total des manches &rarr; Classement du jeu &rarr; Barème du tournoi ($1^{\text{er}}=10\text{pts}, 2^{\text{e}}=8\text{pts}\dots$)
           </span>
         </div>
 
-        <!-- Table of participants -->
-        <div class="mt-4 max-h-80 overflow-y-auto pr-1">
+        <!-- TEAM MODE: LIST OF TEAM CARDS -->
+        <div v-if="isTeamMode" class="mt-4 max-h-96 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
+          <div v-if="errorMessage" class="p-3 rounded-lg bg-rose-950/50 border border-rose-800 text-rose-300 text-xs">
+            {{ errorMessage }}
+          </div>
+
+          <div
+            v-for="team in teamRows"
+            :key="team.id || team.seed"
+            class="p-3.5 rounded-xl border backdrop-blur-md transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+            :class="{
+              'bg-gradient-to-r from-amber-500/15 via-slate-950 to-slate-950 border-amber-400/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]': team.rank === 1,
+              'bg-slate-950/90 border-slate-400/50': team.rank === 2,
+              'bg-slate-950/90 border-amber-700/50': team.rank === 3,
+              'bg-slate-950/80 border-slate-800/90 hover:border-slate-700': !team.rank || team.rank > 3
+            }"
+          >
+            <!-- Left: Team Name & Members -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-mono font-black">
+                  {{ team.name }}
+                </span>
+                <span v-if="team.rank" class="text-xs font-mono font-bold text-slate-300">
+                  Rang #{{ team.rank }}
+                </span>
+              </div>
+
+              <!-- Members list with global rank badges -->
+              <div class="flex flex-wrap items-center gap-2">
+                <div
+                  v-for="m in team.members"
+                  :key="m.id"
+                  class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs"
+                >
+                  <img :src="m.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${m.nickname}`" class="w-5 h-5 rounded-full bg-slate-950 shrink-0" />
+                  <span class="font-bold text-white">{{ m.nickname }}</span>
+                  <span 
+                    class="px-1.5 py-0.2 rounded text-[10px] font-mono font-black shrink-0"
+                    :class="m.globalRank === 1 ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-400 border border-slate-700'"
+                  >
+                    #{{ m.globalRank || '?' }} ({{ m.totalPoints ?? 0 }} pts)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Quick Rank, Numerical Rank, Raw Score & Points -->
+            <div class="flex flex-wrap items-center gap-3 shrink-0">
+              <!-- Quick Rank Buttons (1 to 5) -->
+              <div class="flex items-center gap-1">
+                <button
+                  v-for="rVal in Math.min(teamRows.length, 5)"
+                  :key="rVal"
+                  type="button"
+                  @click="setTeamRank(team, rVal)"
+                  class="w-7 h-7 rounded-lg text-xs font-mono font-bold transition-all flex items-center justify-center"
+                  :class="team.rank === rVal
+                    ? (rVal === 1 ? 'bg-amber-400 text-slate-950 font-black shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-slate-200 text-slate-950 font-black')
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'"
+                >
+                  {{ rVal }}
+                </button>
+              </div>
+
+              <!-- Numerical Rank Input -->
+              <div class="flex items-center gap-1.5">
+                <span class="text-[11px] font-mono text-slate-400">Rang:</span>
+                <input
+                  v-model.number="team.rank"
+                  @input="onTeamRankChange(team)"
+                  type="number"
+                  min="1"
+                  :max="teamRows.length"
+                  placeholder="-"
+                  class="w-14 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 focus:border-amber-500 text-white font-mono font-bold text-xs text-center"
+                />
+              </div>
+
+              <!-- Raw Score Input -->
+              <div class="flex items-center gap-1.5">
+                <span class="text-[11px] font-mono text-slate-400">Score:</span>
+                <input
+                  v-model.number="team.rawScore"
+                  @input="syncRowsFromTeams"
+                  type="number"
+                  step="any"
+                  placeholder="opt."
+                  class="w-16 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 font-mono text-xs text-center"
+                />
+              </div>
+
+              <!-- Points Gained Badge -->
+              <div class="min-w-16 text-right">
+                <span
+                  class="inline-block px-2.5 py-1 rounded-lg font-bold text-xs font-mono"
+                  :class="team.points > 0
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                    : 'text-slate-600'"
+                >
+                  +{{ team.points }} pts
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SOLO MODE: Table of participants -->
+        <div v-else class="mt-4 max-h-80 overflow-y-auto pr-1">
           <div v-if="errorMessage" class="mb-3 p-3 rounded-lg bg-rose-950/50 border border-rose-800 text-rose-300 text-xs">
             {{ errorMessage }}
           </div>
