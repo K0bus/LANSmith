@@ -30,7 +30,10 @@ import {
   SlidersHorizontal,
   TrendingDown,
   Zap,
-  Activity
+  Activity,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-vue-next'
 import GameModal from '~/components/GameModal.vue'
 import { getEffectivePrice, formatCentsToPrice } from '~/shared/utils/pricing'
@@ -44,6 +47,19 @@ const searchQuery = ref('')
 const acquisitionFilter = ref<'ALL' | 'FREE' | 'PAID'>('ALL')
 const selectedTournamentId = ref<string>('')
 const viewMode = ref<'grid' | 'table'>('grid')
+
+// Sorting state: name, price, minGpu, recGpu, minCpu, recCpu
+const sortBy = ref<'name' | 'price' | 'minGpu' | 'recGpu' | 'minCpu' | 'recCpu'>('name')
+const sortOrder = ref<'asc' | 'desc'>('asc')
+
+function toggleSort(field: 'name' | 'price' | 'minGpu' | 'recGpu' | 'minCpu' | 'recCpu') {
+  if (sortBy.value === field) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = field
+    sortOrder.value = field === 'name' || field === 'price' ? 'asc' : 'desc'
+  }
+}
 
 const refreshingPrices = ref<Record<string, boolean>>({})
 
@@ -71,7 +87,7 @@ const filteredGames = computed(() => {
   if (!games.value) return []
   const q = searchQuery.value.trim().toLowerCase()
   
-  return games.value.filter((g: any) => {
+  const filtered = games.value.filter((g: any) => {
     // 1. Tournament filter
     if (tournamentGameIds.value !== null && !tournamentGameIds.value.has(g.id)) {
       return false
@@ -96,6 +112,28 @@ const filteredGames = computed(() => {
     }
 
     return true
+  })
+
+  // 4. Sorting logic
+  return filtered.slice().sort((a: any, b: any) => {
+    let diff = 0
+    if (sortBy.value === 'name') {
+      diff = a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
+    } else if (sortBy.value === 'price') {
+      const priceA = getEffectivePrice(a).raw_cents ?? (getEffectivePrice(a).is_free ? 0 : 9999999)
+      const priceB = getEffectivePrice(b).raw_cents ?? (getEffectivePrice(b).is_free ? 0 : 9999999)
+      diff = priceA - priceB
+    } else if (sortBy.value === 'minGpu') {
+      diff = (a.minGpuScore || 0) - (b.minGpuScore || 0)
+    } else if (sortBy.value === 'recGpu') {
+      diff = (a.recGpuScore || 0) - (b.recGpuScore || 0)
+    } else if (sortBy.value === 'minCpu') {
+      diff = (a.minCpuScore || 0) - (b.minCpuScore || 0)
+    } else if (sortBy.value === 'recCpu') {
+      diff = (a.recCpuScore || 0) - (b.recCpuScore || 0)
+    }
+
+    return sortOrder.value === 'asc' ? diff : -diff
   })
 })
 
@@ -393,7 +431,35 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
             </button>
           </div>
 
-          <!-- 3. Flip-Flop Button: Cards / Grid vs Table View -->
+          <!-- 3. Sort Selector (Nom, Prix, Specs) -->
+          <div class="relative flex items-center">
+            <div class="relative">
+              <ArrowUpDown class="w-3.5 h-3.5 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                :value="`${sortBy}_${sortOrder}`"
+                @change="(e: any) => {
+                  const [field, order] = e.target.value.split('_')
+                  sortBy = field
+                  sortOrder = order
+                }"
+                class="pl-8 pr-8 py-2 rounded-xl text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer transition-all shadow-sm max-w-[210px] truncate font-mono"
+              >
+                <option value="name_asc">Tri : Nom (A → Z)</option>
+                <option value="name_desc">Tri : Nom (Z → A)</option>
+                <option value="price_asc">Tri : Prix (Moins cher)</option>
+                <option value="price_desc">Tri : Prix (Plus cher)</option>
+                <option value="minGpu_asc">Tri : GPU Min (Plus léger)</option>
+                <option value="minGpu_desc">Tri : GPU Min (Plus lourd)</option>
+                <option value="recGpu_asc">Tri : GPU Rec (Plus léger)</option>
+                <option value="recGpu_desc">Tri : GPU Rec (Plus lourd)</option>
+                <option value="minCpu_asc">Tri : CPU Min (Plus léger)</option>
+                <option value="minCpu_desc">Tri : CPU Min (Plus lourd)</option>
+              </select>
+              <ChevronDown class="w-3.5 h-3.5 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          </div>
+
+          <!-- 4. Flip-Flop Button: Cards / Grid vs Table View -->
           <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
             <button
               @click="viewMode = 'grid'"
@@ -810,13 +876,70 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse text-xs font-mono">
           <thead>
-            <tr class="border-b border-slate-800 bg-slate-950/90 text-slate-400 uppercase text-[10px] tracking-wider">
-              <th class="py-3.5 px-4">Jeu</th>
+            <tr class="border-b border-slate-800 bg-slate-950/90 text-slate-400 uppercase text-[10px] tracking-wider select-none">
+              <!-- 1. Jeu / Nom -->
+              <th
+                @click="toggleSort('name')"
+                class="py-3.5 px-4 cursor-pointer hover:text-white transition-colors group/th"
+                title="Cliquer pour trier par nom"
+              >
+                <div class="flex items-center gap-1.5">
+                  <span :class="{ 'text-cyan-400 font-bold': sortBy === 'name' }">Jeu</span>
+                  <ArrowUp v-if="sortBy === 'name' && sortOrder === 'asc'" class="w-3 h-3 text-cyan-400 shrink-0" />
+                  <ArrowDown v-else-if="sortBy === 'name' && sortOrder === 'desc'" class="w-3 h-3 text-cyan-400 shrink-0" />
+                  <ArrowUpDown v-else class="w-3 h-3 text-slate-600 group-hover/th:text-slate-400 shrink-0" />
+                </div>
+              </th>
+
+              <!-- 2. Acquisition -->
               <th class="py-3.5 px-4">Acquisition & Partage</th>
-              <th class="py-3.5 px-4">Tarif Effectif (Meilleur)</th>
+
+              <!-- 3. Tarif Effectif -->
+              <th
+                @click="toggleSort('price')"
+                class="py-3.5 px-4 cursor-pointer hover:text-white transition-colors group/th"
+                title="Cliquer pour trier par prix"
+              >
+                <div class="flex items-center gap-1.5">
+                  <span :class="{ 'text-cyan-400 font-bold': sortBy === 'price' }">Tarif Effectif (Meilleur)</span>
+                  <ArrowUp v-if="sortBy === 'price' && sortOrder === 'asc'" class="w-3 h-3 text-cyan-400 shrink-0" />
+                  <ArrowDown v-else-if="sortBy === 'price' && sortOrder === 'desc'" class="w-3 h-3 text-cyan-400 shrink-0" />
+                  <ArrowUpDown v-else class="w-3 h-3 text-slate-600 group-hover/th:text-slate-400 shrink-0" />
+                </div>
+              </th>
+
+              <!-- 4. Steam vs Clé -->
               <th class="py-3.5 px-4">Steam vs Clé</th>
-              <th class="py-3.5 px-4">Specs Min (GPU / CPU / RAM)</th>
-              <th class="py-3.5 px-4">Specs Rec (GPU / CPU / RAM)</th>
+
+              <!-- 5. Specs Min -->
+              <th
+                @click="toggleSort('minGpu')"
+                class="py-3.5 px-4 cursor-pointer hover:text-white transition-colors group/th"
+                title="Cliquer pour trier par score GPU/CPU minimal"
+              >
+                <div class="flex items-center gap-1.5">
+                  <span :class="{ 'text-cyan-400 font-bold': sortBy === 'minGpu' || sortBy === 'minCpu' }">Specs Min (GPU / CPU / RAM)</span>
+                  <ArrowUp v-if="sortBy === 'minGpu' && sortOrder === 'asc'" class="w-3 h-3 text-cyan-400 shrink-0" />
+                  <ArrowDown v-else-if="sortBy === 'minGpu' && sortOrder === 'desc'" class="w-3 h-3 text-cyan-400 shrink-0" />
+                  <ArrowUpDown v-else class="w-3 h-3 text-slate-600 group-hover/th:text-slate-400 shrink-0" />
+                </div>
+              </th>
+
+              <!-- 6. Specs Rec -->
+              <th
+                @click="toggleSort('recGpu')"
+                class="py-3.5 px-4 cursor-pointer hover:text-white transition-colors group/th"
+                title="Cliquer pour trier par score GPU/CPU recommandé"
+              >
+                <div class="flex items-center gap-1.5">
+                  <span :class="{ 'text-cyan-400 font-bold': sortBy === 'recGpu' || sortBy === 'recCpu' }">Specs Rec (GPU / CPU / RAM)</span>
+                  <ArrowUp v-if="sortBy === 'recGpu' && sortOrder === 'asc'" class="w-3 h-3 text-cyan-400 shrink-0" />
+                  <ArrowDown v-else-if="sortBy === 'recGpu' && sortOrder === 'desc'" class="w-3 h-3 text-cyan-400 shrink-0" />
+                  <ArrowUpDown v-else class="w-3 h-3 text-slate-600 group-hover/th:text-slate-400 shrink-0" />
+                </div>
+              </th>
+
+              <!-- 7. Actions -->
               <th class="py-3.5 px-4 text-right">Actions</th>
             </tr>
           </thead>
