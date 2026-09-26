@@ -44,6 +44,7 @@ export default defineEventHandler(async (event) => {
     ? Number(body.keyshop_price_cents)
     : null;
 
+  let keyshopUrl = body.keyshopUrl?.trim() || body.keyshop_url?.trim() || null;
   let currency = (body.currency || 'EUR').trim();
   let acquisitionType = (body.acquisitionType || body.acquisition_type || 'STORE_BUY').trim().toUpperCase();
   const friendDownloadUrl = body.friendDownloadUrl?.trim() || body.friend_download_url?.trim() || null;
@@ -63,6 +64,9 @@ export default defineEventHandler(async (event) => {
       const keyshopData = await fetchKeyshopPrice(name, steamAppId, steamPriceCents);
       if (keyshopData && keyshopData.success) {
         keyshopPriceCents = keyshopData.priceCents;
+        if (!keyshopUrl && keyshopData.dealUrl) {
+          keyshopUrl = keyshopData.dealUrl;
+        }
       }
       priceUpdatedAt = new Date();
     } catch (err) {
@@ -83,6 +87,7 @@ export default defineEventHandler(async (event) => {
       steamAppId,
       steamPriceCents,
       keyshopPriceCents,
+      keyshopUrl,
       currency,
       acquisitionType,
       friendDownloadUrl,

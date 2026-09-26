@@ -29,6 +29,12 @@ export default defineEventHandler(async (event) => {
     ? (body.keyshop_price_cents === null ? null : Number(body.keyshop_price_cents))
     : undefined;
 
+  const keyshopUrl = body.keyshopUrl !== undefined
+    ? (body.keyshopUrl?.trim() || null)
+    : body.keyshop_url !== undefined
+    ? (body.keyshop_url?.trim() || null)
+    : undefined;
+
   const currency = body.currency !== undefined ? (body.currency?.trim() || 'EUR') : undefined;
 
   const acquisitionType = body.acquisitionType !== undefined
@@ -60,6 +66,7 @@ export default defineEventHandler(async (event) => {
       steamAppId,
       steamPriceCents,
       keyshopPriceCents,
+      keyshopUrl,
       currency,
       acquisitionType,
       friendDownloadUrl,

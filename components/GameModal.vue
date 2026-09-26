@@ -61,6 +61,7 @@ const form = ref({
   steamAppId: '',
   steamPriceCents: null as number | null,
   keyshopPriceCents: null as number | null,
+  keyshopUrl: '',
   currency: 'EUR',
   acquisitionType: 'STORE_BUY' as 'STORE_BUY' | 'FREE_TO_PLAY' | 'FRIEND_SHARE',
   friendDownloadUrl: '',
@@ -261,6 +262,9 @@ async function fetchPricesForCurrentGame(force = true) {
       if (res.game) {
         form.value.steamPriceCents = res.game.steamPriceCents
         form.value.keyshopPriceCents = res.game.keyshopPriceCents
+        if (res.game.keyshopUrl) {
+          form.value.keyshopUrl = res.game.keyshopUrl
+        }
         form.value.currency = res.game.currency || 'EUR'
         form.value.priceUpdatedAt = res.game.priceUpdatedAt
         if (res.game.acquisitionType) {
@@ -284,6 +288,9 @@ async function fetchPricesForCurrentGame(force = true) {
       }
       if (res.keyshop?.success) {
         form.value.keyshopPriceCents = res.keyshop.priceCents
+        if (res.keyshop.dealUrl) {
+          form.value.keyshopUrl = res.keyshop.dealUrl
+        }
       }
       form.value.priceUpdatedAt = res.fetchedAt
       priceFetchMessage.value = 'Tarifs récupérés avec succès !'
@@ -315,6 +322,7 @@ watch(
           steamAppId: g.steamAppId || '',
           steamPriceCents: g.steamPriceCents !== undefined ? g.steamPriceCents : null,
           keyshopPriceCents: g.keyshopPriceCents !== undefined ? g.keyshopPriceCents : null,
+          keyshopUrl: g.keyshopUrl || '',
           currency: g.currency || 'EUR',
           acquisitionType: (g.acquisitionType || 'STORE_BUY') as any,
           friendDownloadUrl: g.friendDownloadUrl || '',
@@ -352,6 +360,7 @@ watch(
           steamAppId: '',
           steamPriceCents: null,
           keyshopPriceCents: null,
+          keyshopUrl: '',
           currency: 'EUR',
           acquisitionType: 'STORE_BUY',
           friendDownloadUrl: '',
@@ -407,6 +416,7 @@ function selectIgdbResult(game: IgdbGameSearchResult) {
     steamAppId: game.steamAppId || '',
     steamPriceCents: null,
     keyshopPriceCents: null,
+    keyshopUrl: '',
     currency: 'EUR',
     acquisitionType: 'STORE_BUY',
     friendDownloadUrl: '',
@@ -456,6 +466,7 @@ async function submitForm() {
       steamAppId: form.value.steamAppId?.trim() || null,
       steamPriceCents: form.value.steamPriceCents !== null ? Number(form.value.steamPriceCents) : null,
       keyshopPriceCents: form.value.keyshopPriceCents !== null ? Number(form.value.keyshopPriceCents) : null,
+      keyshopUrl: form.value.keyshopUrl?.trim() || null,
       currency: form.value.currency || 'EUR',
       acquisitionType: form.value.acquisitionType || 'STORE_BUY',
       friendDownloadUrl: form.value.friendDownloadUrl?.trim() || null,
@@ -881,7 +892,7 @@ async function submitForm() {
                     target="_blank"
                     class="text-[10px] text-blue-400 hover:underline flex items-center gap-0.5"
                   >
-                    <span>Store</span>
+                    <span>Store Steam</span>
                     <ExternalLink class="w-2.5 h-2.5" />
                   </a>
                 </label>
@@ -932,10 +943,43 @@ async function submitForm() {
               </div>
             </div>
 
+            <!-- URL Revendeur / Marché Gris -->
+            <div class="space-y-1 pt-1">
+              <label class="block text-[11px] font-semibold text-slate-300 flex items-center justify-between">
+                <span>Lien direct Store Revendeur / Comparateur :</span>
+                <a
+                  v-if="effectivePrice.keyshop_url"
+                  :href="effectivePrice.keyshop_url"
+                  target="_blank"
+                  class="text-[10px] text-purple-400 hover:underline flex items-center gap-0.5"
+                >
+                  <span>Tester le store revendeur</span>
+                  <ExternalLink class="w-2.5 h-2.5" />
+                </a>
+              </label>
+              <div class="flex gap-2">
+                <input
+                  v-model="form.keyshopUrl"
+                  type="text"
+                  placeholder="Ex: https://gg.deals/... ou https://instant-gaming.com/... (si vide, fallback automatique GG.deals)"
+                  class="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-purple-300 font-mono placeholder-slate-600"
+                />
+                <a
+                  v-if="form.keyshopUrl && form.keyshopUrl.startsWith('http')"
+                  :href="form.keyshopUrl"
+                  target="_blank"
+                  class="px-3 py-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900/80 border border-purple-800/80 text-purple-300 text-xs flex items-center gap-1 shrink-0"
+                >
+                  <ExternalLink class="w-3 h-3" />
+                  <span>Ouvrir</span>
+                </a>
+              </div>
+            </div>
+
             <!-- Synthèse du Tarif Effectif Calculé -->
-            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <Tag class="w-4 h-4 text-cyan-400" />
+            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                <Tag class="w-4 h-4 text-cyan-400 shrink-0" />
                 <span class="text-xs text-slate-300">Tarif effectif affiché aux joueurs :</span>
                 <span
                   class="px-2 py-0.5 rounded text-xs font-bold font-mono"
@@ -947,8 +991,26 @@ async function submitForm() {
                 >
                   {{ effectivePrice.display_price }} ({{ effectivePrice.source_label }})
                 </span>
+                <a
+                  v-if="effectivePrice.source === 'STEAM' && effectivePrice.steam_url"
+                  :href="effectivePrice.steam_url"
+                  target="_blank"
+                  class="inline-flex items-center gap-1 text-[11px] font-mono text-blue-400 hover:underline ml-1"
+                >
+                  <span>Voir sur Steam</span>
+                  <ExternalLink class="w-2.5 h-2.5" />
+                </a>
+                <a
+                  v-else-if="effectivePrice.source === 'KEYSHOP' && effectivePrice.keyshop_url"
+                  :href="effectivePrice.keyshop_url"
+                  target="_blank"
+                  class="inline-flex items-center gap-1 text-[11px] font-mono text-purple-400 hover:underline ml-1"
+                >
+                  <span>Voir offre Revendeur</span>
+                  <ExternalLink class="w-2.5 h-2.5" />
+                </a>
               </div>
-              <div v-if="effectivePrice.savings_cents && effectivePrice.savings_cents > 0" class="text-[11px] font-mono text-emerald-400">
+              <div v-if="effectivePrice.savings_cents && effectivePrice.savings_cents > 0" class="text-[11px] font-mono text-emerald-400 shrink-0">
                 Économie de {{ formatCentsToPrice(effectivePrice.savings_cents) }} (-{{ effectivePrice.savings_percent }}%)
               </div>
             </div>

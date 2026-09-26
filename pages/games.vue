@@ -480,6 +480,32 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
               </span>
 
               <!-- Store Buy - Lowest Price Tag -->
+              <a
+                v-else-if="getEffectivePrice(game).source === 'KEYSHOP' && getEffectivePrice(game).keyshop_url"
+                :href="getEffectivePrice(game).keyshop_url!"
+                target="_blank"
+                class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-900 backdrop-blur-md border border-emerald-500/80 hover:border-emerald-400 text-white text-xs font-mono font-bold flex items-center gap-1.5 shadow-lg group/tag transition-all"
+                title="Acheter au meilleur prix (Store revendeur)"
+              >
+                <Tag class="w-3.5 h-3.5 text-emerald-400" />
+                <span class="text-emerald-300 font-extrabold">{{ getEffectivePrice(game).display_price }}</span>
+                <span class="text-[10px] text-slate-300 font-normal">({{ getEffectivePrice(game).source_label }})</span>
+                <ExternalLink class="w-3 h-3 text-slate-400 group-hover/tag:text-emerald-300 ml-0.5" />
+              </a>
+
+              <a
+                v-else-if="getEffectivePrice(game).source === 'STEAM' && getEffectivePrice(game).steam_url"
+                :href="getEffectivePrice(game).steam_url!"
+                target="_blank"
+                class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-900 backdrop-blur-md border border-cyan-500/80 hover:border-cyan-400 text-white text-xs font-mono font-bold flex items-center gap-1.5 shadow-lg group/tag transition-all"
+                title="Acheter sur le store officiel Steam"
+              >
+                <Tag class="w-3.5 h-3.5 text-cyan-400" />
+                <span class="text-cyan-300 font-extrabold">{{ getEffectivePrice(game).display_price }}</span>
+                <span class="text-[10px] text-slate-300 font-normal">({{ getEffectivePrice(game).source_label }})</span>
+                <ExternalLink class="w-3 h-3 text-slate-400 group-hover/tag:text-cyan-300 ml-0.5" />
+              </a>
+
               <div
                 v-else
                 class="px-2.5 py-1 rounded-lg bg-slate-900/90 backdrop-blur-md border border-cyan-500/60 text-white text-xs font-mono font-bold flex items-center gap-1.5 shadow-lg"
@@ -525,9 +551,16 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
                 <span v-if="game.genres" class="text-[10px] text-cyan-400/90 font-mono truncate">
                   {{ game.genres }}
                 </span>
-                <span v-if="game.steamAppId" class="text-[10px] text-blue-300 font-mono">
-                  Steam #{{ game.steamAppId }}
-                </span>
+                <a
+                  v-if="game.steamAppId"
+                  :href="`https://store.steampowered.com/app/${game.steamAppId}`"
+                  target="_blank"
+                  class="text-[10px] text-blue-300 hover:text-blue-200 font-mono hover:underline inline-flex items-center gap-0.5"
+                  title="Ouvrir la fiche Steam"
+                >
+                  <span>Steam #{{ game.steamAppId }}</span>
+                  <ExternalLink class="w-2.5 h-2.5" />
+                </a>
               </div>
             </div>
           </div>
@@ -576,53 +609,109 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
               </div>
 
               <!-- Cas 2: Free to Play -->
-              <div v-else-if="game.acquisitionType === 'FREE_TO_PLAY'" class="flex items-center justify-between p-2 rounded-lg bg-emerald-950/30 border border-emerald-800/60 text-xs">
-                <span class="text-emerald-300 font-bold flex items-center gap-1.5">
-                  <Sparkles class="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Free-to-Play officiel</span>
-                </span>
-                <span class="text-emerald-400 font-mono font-bold">0,00 €</span>
+              <div v-else-if="game.acquisitionType === 'FREE_TO_PLAY'" class="space-y-2">
+                <div class="flex items-center justify-between p-2 rounded-lg bg-emerald-950/30 border border-emerald-800/60 text-xs">
+                  <span class="text-emerald-300 font-bold flex items-center gap-1.5">
+                    <Sparkles class="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Free-to-Play officiel</span>
+                  </span>
+                  <span class="text-emerald-400 font-mono font-bold">0,00 €</span>
+                </div>
+                <a
+                  v-if="getEffectivePrice(game).steam_url"
+                  :href="getEffectivePrice(game).steam_url!"
+                  target="_blank"
+                  class="flex items-center justify-between p-1.5 px-2.5 rounded-lg bg-blue-950/30 hover:bg-blue-900/40 border border-blue-800/50 text-blue-300 text-xs font-mono transition-all"
+                >
+                  <span class="flex items-center gap-1.5">
+                    <Store class="w-3 h-3 text-blue-400" />
+                    <span>Télécharger / Installer sur Steam</span>
+                  </span>
+                  <ExternalLink class="w-3 h-3" />
+                </a>
               </div>
 
               <!-- Cas 3: Store / Clés avec Comparateur Steam vs Marché Gris -->
               <div v-else class="space-y-1.5">
                 <div class="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <!-- Steam Official -->
-                  <div
-                    class="p-2 rounded-lg border flex flex-col justify-between"
+                  <!-- Steam Official Store Link -->
+                  <a
+                    v-if="getEffectivePrice(game).steam_url"
+                    :href="getEffectivePrice(game).steam_url!"
+                    target="_blank"
+                    class="p-2 rounded-lg border flex flex-col justify-between transition-all hover:scale-[1.02] cursor-pointer group/steam"
                     :class="
                       getEffectivePrice(game).source === 'STEAM'
-                        ? 'bg-blue-950/40 border-blue-500/80 text-white'
-                        : 'bg-slate-900 border-slate-800 text-slate-400'
+                        ? 'bg-blue-950/40 border-blue-500/80 text-white hover:border-blue-400'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
                     "
+                    title="Ouvrir la page officielle Steam"
+                  >
+                    <div class="flex items-center justify-between text-[10px]">
+                      <span class="text-blue-300 flex items-center gap-1 group-hover/steam:text-blue-200">
+                        <Store class="w-3 h-3" />
+                        <span>Steam</span>
+                      </span>
+                      <div class="flex items-center gap-1">
+                        <span v-if="getEffectivePrice(game).source === 'STEAM'" class="text-[9px] text-cyan-400 uppercase font-bold">Choisi</span>
+                        <ExternalLink class="w-2.5 h-2.5 text-slate-500 group-hover/steam:text-blue-300" />
+                      </div>
+                    </div>
+                    <div class="text-sm font-bold text-white mt-1">
+                      {{ formatCentsToPrice(game.steamPriceCents, game.currency) }}
+                    </div>
+                  </a>
+                  <div
+                    v-else
+                    class="p-2 rounded-lg border flex flex-col justify-between bg-slate-900 border-slate-800 text-slate-400"
                   >
                     <div class="flex items-center justify-between text-[10px]">
                       <span class="text-blue-300 flex items-center gap-1">
                         <Store class="w-3 h-3" />
                         <span>Steam</span>
                       </span>
-                      <span v-if="getEffectivePrice(game).source === 'STEAM'" class="text-[9px] text-cyan-400 uppercase font-bold">Choisi</span>
                     </div>
                     <div class="text-sm font-bold text-white mt-1">
                       {{ formatCentsToPrice(game.steamPriceCents, game.currency) }}
                     </div>
                   </div>
 
-                  <!-- Keyshop / Gray Market -->
-                  <div
-                    class="p-2 rounded-lg border flex flex-col justify-between"
+                  <!-- Keyshop / Gray Market Deal Link -->
+                  <a
+                    v-if="getEffectivePrice(game).keyshop_url"
+                    :href="getEffectivePrice(game).keyshop_url!"
+                    target="_blank"
+                    class="p-2 rounded-lg border flex flex-col justify-between transition-all hover:scale-[1.02] cursor-pointer group/keyshop"
                     :class="
                       getEffectivePrice(game).source === 'KEYSHOP'
-                        ? 'bg-emerald-950/40 border-emerald-500/80 text-white'
-                        : 'bg-slate-900 border-slate-800 text-slate-400'
+                        ? 'bg-emerald-950/40 border-emerald-500/80 text-white hover:border-emerald-400'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
                     "
+                    title="Ouvrir le deal revendeur / GG.deals"
+                  >
+                    <div class="flex items-center justify-between text-[10px]">
+                      <span class="text-purple-300 flex items-center gap-1 group-hover/keyshop:text-purple-200">
+                        <Tag class="w-3 h-3" />
+                        <span>Clé Revendeur</span>
+                      </span>
+                      <div class="flex items-center gap-1">
+                        <span v-if="getEffectivePrice(game).source === 'KEYSHOP'" class="text-[9px] text-emerald-400 uppercase font-bold">Meilleur</span>
+                        <ExternalLink class="w-2.5 h-2.5 text-slate-500 group-hover/keyshop:text-emerald-300" />
+                      </div>
+                    </div>
+                    <div class="text-sm font-bold text-emerald-400 mt-1">
+                      {{ formatCentsToPrice(game.keyshopPriceCents, game.currency) }}
+                    </div>
+                  </a>
+                  <div
+                    v-else
+                    class="p-2 rounded-lg border flex flex-col justify-between bg-slate-900 border-slate-800 text-slate-400"
                   >
                     <div class="flex items-center justify-between text-[10px]">
                       <span class="text-purple-300 flex items-center gap-1">
                         <Tag class="w-3 h-3" />
                         <span>Clé Revendeur</span>
                       </span>
-                      <span v-if="getEffectivePrice(game).source === 'KEYSHOP'" class="text-[9px] text-emerald-400 uppercase font-bold">Meilleur</span>
                     </div>
                     <div class="text-sm font-bold text-emerald-400 mt-1">
                       {{ formatCentsToPrice(game.keyshopPriceCents, game.currency) }}
@@ -815,18 +904,46 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
 
               <!-- 4. Steam vs Clé -->
               <td class="py-3 px-4 whitespace-nowrap">
-                <div v-if="game.acquisitionType === 'STORE_BUY'" class="space-y-0.5 text-[11px]">
-                  <div class="text-blue-300">
-                    Steam : <strong>{{ formatCentsToPrice(game.steamPriceCents, game.currency) }}</strong>
+                <div v-if="game.acquisitionType === 'STORE_BUY'" class="space-y-1 text-[11px] font-mono">
+                  <div>
+                    <a
+                      v-if="getEffectivePrice(game).steam_url"
+                      :href="getEffectivePrice(game).steam_url!"
+                      target="_blank"
+                      class="inline-flex items-center gap-1 text-blue-300 hover:text-blue-200 hover:underline"
+                      title="Ouvrir la page du store Steam"
+                    >
+                      <Store class="w-3 h-3 text-blue-400" />
+                      <span>Steam : <strong>{{ formatCentsToPrice(game.steamPriceCents, game.currency) }}</strong></span>
+                      <ExternalLink class="w-2.5 h-2.5 opacity-60" />
+                    </a>
+                    <span v-else class="text-blue-300 inline-flex items-center gap-1">
+                      <Store class="w-3 h-3 text-blue-400" />
+                      <span>Steam : <strong>{{ formatCentsToPrice(game.steamPriceCents, game.currency) }}</strong></span>
+                    </span>
                   </div>
-                  <div class="text-emerald-400">
-                    Clé : <strong>{{ formatCentsToPrice(game.keyshopPriceCents, game.currency) }}</strong>
+                  <div>
+                    <a
+                      v-if="getEffectivePrice(game).keyshop_url"
+                      :href="getEffectivePrice(game).keyshop_url!"
+                      target="_blank"
+                      class="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 hover:underline"
+                      title="Ouvrir l'offre revendeur de clés"
+                    >
+                      <Tag class="w-3 h-3 text-emerald-400" />
+                      <span>Clé : <strong>{{ formatCentsToPrice(game.keyshopPriceCents, game.currency) }}</strong></span>
+                      <ExternalLink class="w-2.5 h-2.5 opacity-60" />
+                    </a>
+                    <span v-else class="text-emerald-400 inline-flex items-center gap-1">
+                      <Tag class="w-3 h-3 text-emerald-400" />
+                      <span>Clé : <strong>{{ formatCentsToPrice(game.keyshopPriceCents, game.currency) }}</strong></span>
+                    </span>
                   </div>
                   <div v-if="getEffectivePrice(game).savings_cents && getEffectivePrice(game).savings_cents! > 0" class="text-[10px] text-emerald-300 font-bold">
                     -{{ getEffectivePrice(game).savings_percent }}% ({{ formatCentsToPrice(getEffectivePrice(game).savings_cents) }})
                   </div>
                 </div>
-                <div v-else class="text-slate-500 text-[11px]">
+                <div v-else class="text-slate-500 text-[11px] font-mono">
                   0,00 € (Inclus)
                 </div>
               </td>

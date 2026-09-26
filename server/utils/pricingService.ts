@@ -216,10 +216,15 @@ export async function updateGamePrices(
     }
   }
 
+  let keyshopUrl = game.keyshopUrl
+
   // 2. Fetch Keyshop Price
   const keyshopData = await fetchKeyshopPrice(game.name, game.steamAppId, steamPriceCents)
   if (keyshopData && keyshopData.success) {
     keyshopPriceCents = keyshopData.priceCents
+    if (!keyshopUrl && keyshopData.dealUrl) {
+      keyshopUrl = keyshopData.dealUrl
+    }
   }
 
   // 3. Persist update in DB
@@ -228,6 +233,7 @@ export async function updateGamePrices(
     data: {
       steamPriceCents,
       keyshopPriceCents,
+      keyshopUrl,
       currency,
       acquisitionType,
       priceUpdatedAt: now

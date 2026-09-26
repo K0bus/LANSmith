@@ -72,6 +72,8 @@ export interface EffectivePrice {
   source_label: string
   steam_price_formatted?: string | null
   keyshop_price_formatted?: string | null
+  steam_url?: string | null
+  keyshop_url?: string | null
   savings_cents?: number | null
   savings_percent?: number | null
   friend_download_url?: string | null
@@ -100,6 +102,7 @@ export interface GameItem {
   // Pricing fields
   steamPriceCents?: number | null
   keyshopPriceCents?: number | null
+  keyshopUrl?: string | null
   currency?: string
   priceUpdatedAt?: string | Date | null
   acquisitionType?: AcquisitionType | string

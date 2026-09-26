@@ -28,7 +28,7 @@ export function formatCentsToPrice(
 }
 
 /**
- * Calculates the effective price, source label, savings and display formatting for a game.
+ * Calculates the effective price, source label, store links, savings and display formatting for a game.
  * Supports both camelCase and snake_case properties for compatibility.
  */
 export function getEffectivePrice(
@@ -41,7 +41,9 @@ export function getEffectivePrice(
       raw_cents: null,
       currency: 'EUR',
       source: 'UNAVAILABLE',
-      source_label: 'Indisponible'
+      source_label: 'Indisponible',
+      steam_url: null,
+      keyshop_url: null
     }
   }
 
@@ -49,6 +51,10 @@ export function getEffectivePrice(
   const rawAcquisition = (game.acquisitionType || game.acquisition_type || 'STORE_BUY') as string
   const acquisitionType = rawAcquisition.toUpperCase()
   const friendDownloadUrl = (game.friendDownloadUrl || game.friend_download_url || null) as string | null
+  const steamAppId = (game.steamAppId || game.steam_app_id || null) as string | null
+  const customKeyshopUrl = (game.keyshopUrl || game.keyshop_url || null) as string | null
+  const gameName = game.name || ''
+
   const lastUpdated = game.priceUpdatedAt || game.price_updated_at
     ? new Date(game.priceUpdatedAt || game.price_updated_at).toISOString()
     : null
@@ -70,6 +76,10 @@ export function getEffectivePrice(
   const steamFormatted = steamCents !== null ? formatCentsToPrice(steamCents, currency) : null
   const keyshopFormatted = keyshopCents !== null ? formatCentsToPrice(keyshopCents, currency) : null
 
+  // Generated Store URLs
+  const steamUrl = steamAppId ? `https://store.steampowered.com/app/${steamAppId}` : null
+  const keyshopUrl = customKeyshopUrl || (steamAppId ? `https://gg.deals/game/${steamAppId}` : (gameName ? `https://gg.deals/games/?title=${encodeURIComponent(gameName)}` : null))
+
   // 1. FREE TO PLAY
   if (acquisitionType === 'FREE_TO_PLAY') {
     return {
@@ -81,6 +91,8 @@ export function getEffectivePrice(
       source_label: 'Free-to-Play',
       steam_price_formatted: steamFormatted,
       keyshop_price_formatted: keyshopFormatted,
+      steam_url: steamUrl,
+      keyshop_url: keyshopUrl,
       friend_download_url: friendDownloadUrl,
       last_updated: lastUpdated
     }
@@ -97,6 +109,8 @@ export function getEffectivePrice(
       source_label: 'Partage entre amis',
       steam_price_formatted: steamFormatted,
       keyshop_price_formatted: keyshopFormatted,
+      steam_url: steamUrl,
+      keyshop_url: keyshopUrl,
       friend_download_url: friendDownloadUrl,
       last_updated: lastUpdated
     }
@@ -116,6 +130,8 @@ export function getEffectivePrice(
         source_label: 'Clé revendeur',
         steam_price_formatted: steamFormatted,
         keyshop_price_formatted: keyshopFormatted,
+        steam_url: steamUrl,
+        keyshop_url: keyshopUrl,
         savings_cents: savingsCents,
         savings_percent: savingsPercent,
         friend_download_url: friendDownloadUrl,
@@ -131,6 +147,8 @@ export function getEffectivePrice(
         source_label: 'Steam',
         steam_price_formatted: steamFormatted,
         keyshop_price_formatted: keyshopFormatted,
+        steam_url: steamUrl,
+        keyshop_url: keyshopUrl,
         savings_cents: 0,
         savings_percent: 0,
         friend_download_url: friendDownloadUrl,
@@ -149,6 +167,8 @@ export function getEffectivePrice(
       source_label: 'Steam',
       steam_price_formatted: steamFormatted,
       keyshop_price_formatted: keyshopFormatted,
+      steam_url: steamUrl,
+      keyshop_url: keyshopUrl,
       friend_download_url: friendDownloadUrl,
       last_updated: lastUpdated
     }
@@ -164,6 +184,8 @@ export function getEffectivePrice(
       source_label: 'Clé revendeur',
       steam_price_formatted: steamFormatted,
       keyshop_price_formatted: keyshopFormatted,
+      steam_url: steamUrl,
+      keyshop_url: keyshopUrl,
       friend_download_url: friendDownloadUrl,
       last_updated: lastUpdated
     }
@@ -178,6 +200,8 @@ export function getEffectivePrice(
     source_label: 'Prix non renseigné',
     steam_price_formatted: null,
     keyshop_price_formatted: null,
+    steam_url: steamUrl,
+    keyshop_url: keyshopUrl,
     friend_download_url: friendDownloadUrl,
     last_updated: lastUpdated
   }

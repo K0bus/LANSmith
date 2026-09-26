@@ -83,6 +83,7 @@ model Game {
   // Suivi dynamique des prix et modes d'acquisition
   steamPriceCents   Int?              @map("steam_price_cents")
   keyshopPriceCents Int?              @map("keyshop_price_cents")
+  keyshopUrl        String?           @map("keyshop_url")
   currency          String            @default("EUR")
   priceUpdatedAt    DateTime?         @map("price_updated_at")
   acquisitionType   String            @default("STORE_BUY") @map("acquisition_type") // STORE_BUY, FREE_TO_PLAY, FRIEND_SHARE
