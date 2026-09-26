@@ -21,25 +21,63 @@ import {
   Store,
   Users,
   CheckCircle2,
-  DollarSign
+  DollarSign,
+  Trophy,
+  ChevronDown,
+  X,
+  LayoutGrid,
+  List,
+  SlidersHorizontal,
+  TrendingDown,
+  Zap,
+  Activity
 } from 'lucide-vue-next'
 import GameModal from '~/components/GameModal.vue'
 import { getEffectivePrice, formatCentsToPrice } from '~/shared/utils/pricing'
 
 const { data: games, pending, refresh } = await useFetch<any[]>('/api/games')
+const { data: tournaments } = await useFetch<any[]>('/api/tournaments')
 
 const isModalOpen = ref(false)
 const selectedGame = ref<any>(null)
 const searchQuery = ref('')
 const acquisitionFilter = ref<'ALL' | 'FREE' | 'PAID'>('ALL')
+const selectedTournamentId = ref<string>('')
+const viewMode = ref<'grid' | 'table'>('grid')
 
 const refreshingPrices = ref<Record<string, boolean>>({})
+
+const selectedTournament = computed(() => {
+  if (!selectedTournamentId.value || !tournaments.value) return null
+  return tournaments.value.find((t: any) => t.id === selectedTournamentId.value) || null
+})
+
+const tournamentGameIds = computed(() => {
+  if (!selectedTournament.value) return null
+  const ids = new Set<string>()
+  const t = selectedTournament.value
+  if (t.tournamentGames && t.tournamentGames.length > 0) {
+    t.tournamentGames.forEach((tg: any) => {
+      if (tg.gameId) ids.add(tg.gameId)
+      if (tg.game?.id) ids.add(tg.game.id)
+    })
+  } else if (t.games && t.games.length > 0) {
+    t.games.forEach((g: any) => ids.add(g.id))
+  }
+  return ids
+})
 
 const filteredGames = computed(() => {
   if (!games.value) return []
   const q = searchQuery.value.trim().toLowerCase()
   
   return games.value.filter((g: any) => {
+    // 1. Tournament filter
+    if (tournamentGameIds.value !== null && !tournamentGameIds.value.has(g.id)) {
+      return false
+    }
+
+    // 2. Search query filter
     const matchesSearch =
       !q ||
       g.name.toLowerCase().includes(q) ||
@@ -48,6 +86,7 @@ const filteredGames = computed(() => {
 
     if (!matchesSearch) return false
 
+    // 3. Acquisition filter
     const eff = getEffectivePrice(g)
     if (acquisitionFilter.value === 'FREE') {
       return eff.is_free
@@ -58,6 +97,75 @@ const filteredGames = computed(() => {
 
     return true
   })
+})
+
+// Summary / KPI metrics based on filtered games
+const summaryStats = computed(() => {
+  const list = filteredGames.value
+  const totalGames = list.length
+  if (totalGames === 0) {
+    return {
+      totalGames: 0,
+      freeGamesCount: 0,
+      paidGamesCount: 0,
+      totalEstimatedCents: 0,
+      totalSteamFullCents: 0,
+      totalSavingsCents: 0,
+      avgMinGpu: 0,
+      avgRecGpu: 0,
+      avgMinCpu: 0,
+      avgRecCpu: 0,
+      avgMinRamGb: 0,
+      avgRecRamGb: 0
+    }
+  }
+
+  let freeGamesCount = 0
+  let paidGamesCount = 0
+  let totalEstimatedCents = 0
+  let totalSteamFullCents = 0
+
+  let sumMinGpu = 0
+  let sumRecGpu = 0
+  let sumMinCpu = 0
+  let sumRecCpu = 0
+  let sumMinRam = 0
+  let sumRecRam = 0
+
+  for (const g of list) {
+    const eff = getEffectivePrice(g)
+    if (eff.is_free) {
+      freeGamesCount++
+    } else {
+      paidGamesCount++
+      totalEstimatedCents += eff.raw_cents || 0
+      totalSteamFullCents += g.steamPriceCents || eff.raw_cents || 0
+    }
+
+    sumMinGpu += g.minGpuScore || 0
+    sumRecGpu += g.recGpuScore || 0
+    sumMinCpu += g.minCpuScore || 0
+    sumRecCpu += g.recCpuScore || 0
+    sumMinRam += g.minRamGb || 8
+    sumRecRam += g.recRamGb || 16
+  }
+
+  const totalSavingsCents = Math.max(0, totalSteamFullCents - totalEstimatedCents)
+
+  return {
+    totalGames,
+    freeGamesCount,
+    paidGamesCount,
+    totalEstimatedCents,
+    totalSteamFullCents,
+    totalSavingsCents,
+    avgMinGpu: Math.round(sumMinGpu / totalGames),
+    avgRecGpu: Math.round(sumRecGpu / totalGames),
+    avgMinCpu: Math.round(sumMinCpu / totalGames),
+    avgRecCpu: Math.round(sumRecCpu / totalGames),
+    avgMinRamGb: Number((sumMinRam / totalGames).toFixed(1)),
+    avgRecRamGb: Number((sumRecRam / totalGames).toFixed(1))
+  }
 })
 
 function openAddModal() {
@@ -124,61 +232,218 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
 
       <button
         @click="openAddModal"
-        class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-glow-cyan transition-all cursor-pointer"
+        class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-glow-cyan transition-all cursor-pointer shrink-0"
       >
         <Plus class="w-4 h-4 text-slate-950" />
         <span>Importer / Ajouter un Jeu</span>
       </button>
     </div>
 
-    <!-- Search bar & Acquisition Filters -->
-    <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-      <div class="relative w-full max-w-md">
-        <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Rechercher un jeu (nom, genre, description)..."
-          class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 focus:border-cyan-500 text-xs text-white placeholder-slate-500 font-mono"
-        />
+    <!-- SUMMARY / KPI BANNER (TOP RÉCAPITULATIF) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- 1. Volume & Mix Jeux -->
+      <div class="cyber-card p-4 bg-slate-950/80 border-slate-800 flex items-center gap-4 relative overflow-hidden group">
+        <div class="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shrink-0">
+          <Gamepad2 class="w-6 h-6" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+            Jeux Sélectionnés
+          </div>
+          <div class="text-2xl font-black text-white font-mono mt-0.5">
+            {{ summaryStats.totalGames }} <span class="text-xs text-slate-400 font-normal">titre(s)</span>
+          </div>
+          <div class="text-[10px] font-mono text-cyan-300 mt-0.5 truncate">
+            {{ summaryStats.freeGamesCount }} gratuit(s) • {{ summaryStats.paidGamesCount }} payant(s)
+          </div>
+        </div>
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-cyan-500/5 rounded-full blur-xl group-hover:bg-cyan-500/15 transition-all pointer-events-none" />
       </div>
 
-      <!-- Filters -->
-      <div class="flex items-center gap-2">
-        <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-mono">
-          <button
-            @click="acquisitionFilter = 'ALL'"
-            class="px-3 py-1.5 rounded-lg transition-all cursor-pointer"
-            :class="acquisitionFilter === 'ALL' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400 hover:text-slate-200'"
-          >
-            Tous ({{ games?.length || 0 }})
-          </button>
-          <button
-            @click="acquisitionFilter = 'FREE'"
-            class="px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
-            :class="acquisitionFilter === 'FREE' ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-bold' : 'text-slate-400 hover:text-slate-200'"
-          >
-            <Sparkles class="w-3.5 h-3.5 text-emerald-400" />
-            <span>Gratuits / F2P & Partage</span>
-          </button>
-          <button
-            @click="acquisitionFilter = 'PAID'"
-            class="px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
-            :class="acquisitionFilter === 'PAID' ? 'bg-blue-950/80 text-blue-300 border border-blue-800 font-bold' : 'text-slate-400 hover:text-slate-200'"
-          >
-            <Store class="w-3.5 h-3.5 text-blue-400" />
-            <span>Payants / Clés</span>
-          </button>
+      <!-- 2. Budget / Coût Total Estimé du Lot -->
+      <div class="cyber-card p-4 bg-slate-950/80 border-slate-800 flex items-center gap-4 relative overflow-hidden group">
+        <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shrink-0">
+          <Coins class="w-6 h-6" />
         </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+            Tarif Estimé du Lot
+          </div>
+          <div class="text-2xl font-black text-emerald-400 font-mono mt-0.5">
+            {{ formatCentsToPrice(summaryStats.totalEstimatedCents) }}
+          </div>
+          <div class="text-[10px] font-mono text-slate-400 mt-0.5 truncate">
+            <span v-if="summaryStats.totalSavingsCents > 0" class="text-emerald-300 font-semibold flex items-center gap-0.5">
+              <TrendingDown class="w-3 h-3" />
+              <span>-{{ formatCentsToPrice(summaryStats.totalSavingsCents) }} d'économie</span>
+            </span>
+            <span v-else>Tarif optimisé avec F2P & Partages</span>
+          </div>
+        </div>
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl group-hover:bg-emerald-500/15 transition-all pointer-events-none" />
+      </div>
 
-        <div class="text-xs font-mono text-slate-400 hidden sm:block">
-          {{ filteredGames.length }} jeu(x)
+      <!-- 3. Moyenne Score GPU -->
+      <div class="cyber-card p-4 bg-slate-950/80 border-slate-800 flex items-center gap-4 relative overflow-hidden group">
+        <div class="p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 shrink-0">
+          <Monitor class="w-6 h-6" />
         </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider flex items-center justify-between">
+            <span>Moyenne GPU</span>
+            <span class="text-[9px] text-purple-400">G3D Mark</span>
+          </div>
+          <div class="text-2xl font-black text-purple-300 font-mono mt-0.5">
+            {{ summaryStats.avgMinGpu }} <span class="text-xs text-slate-400 font-normal">pts (Min)</span>
+          </div>
+          <div class="text-[10px] font-mono text-purple-300/80 mt-0.5 truncate">
+            Rec : <strong>{{ summaryStats.avgRecGpu }} pts</strong>
+          </div>
+        </div>
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-purple-500/5 rounded-full blur-xl group-hover:bg-purple-500/15 transition-all pointer-events-none" />
+      </div>
+
+      <!-- 4. Moyenne Score CPU & RAM -->
+      <div class="cyber-card p-4 bg-slate-950/80 border-slate-800 flex items-center gap-4 relative overflow-hidden group">
+        <div class="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 shrink-0">
+          <Cpu class="w-6 h-6" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider flex items-center justify-between">
+            <span>Moyenne CPU & RAM</span>
+            <span class="text-[9px] text-blue-400">PassMark</span>
+          </div>
+          <div class="text-2xl font-black text-cyan-300 font-mono mt-0.5">
+            {{ summaryStats.avgMinCpu }} <span class="text-xs text-slate-400 font-normal">pts (Min)</span>
+          </div>
+          <div class="text-[10px] font-mono text-blue-300/80 mt-0.5 truncate">
+            Rec : <strong>{{ summaryStats.avgRecCpu }} pts</strong> • RAM : <strong>{{ summaryStats.avgMinRamGb }} Go</strong>
+          </div>
+        </div>
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-blue-500/5 rounded-full blur-xl group-hover:bg-blue-500/15 transition-all pointer-events-none" />
       </div>
     </div>
 
-    <!-- Games Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <!-- Controls Bar : Search, Tournament Filter, Acquisition Filters & View Switcher -->
+    <div class="space-y-3">
+      <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+        <!-- Search bar -->
+        <div class="relative flex-1 max-w-md">
+          <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Rechercher un jeu (nom, genre, description)..."
+            class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 focus:border-cyan-500 text-xs text-white placeholder-slate-500 font-mono"
+          />
+        </div>
+
+        <!-- Filters & View Switcher Group -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <!-- 1. Tournament Filter Selector -->
+          <div class="relative flex items-center">
+            <div class="relative">
+              <Trophy class="w-3.5 h-3.5 text-amber-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                v-model="selectedTournamentId"
+                class="pl-9 pr-8 py-2 rounded-xl text-xs font-semibold bg-slate-900 border text-slate-300 focus:outline-none focus:border-amber-500/50 appearance-none cursor-pointer transition-all shadow-sm max-w-[220px] sm:max-w-xs truncate"
+                :class="selectedTournamentId ? 'border-amber-500/60 bg-amber-950/20 text-amber-200 font-bold' : 'border-slate-800'"
+              >
+                <option value="">Tous les tournois (Catalogue complet)</option>
+                <option v-for="t in tournaments" :key="t.id" :value="t.id">
+                  🏆 {{ t.name }} ({{ t.tournamentGames?.length || t.games?.length || 0 }} jeux)
+                </option>
+              </select>
+              <ChevronDown class="w-3.5 h-3.5 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+            <button
+              v-if="selectedTournamentId"
+              @click="selectedTournamentId = ''"
+              class="ml-1.5 p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all cursor-pointer"
+              title="Réinitialiser le filtre de tournoi"
+            >
+              <X class="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <!-- 2. Acquisition Filters (All, Free, Paid) -->
+          <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-mono">
+            <button
+              @click="acquisitionFilter = 'ALL'"
+              class="px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+              :class="acquisitionFilter === 'ALL' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400 hover:text-slate-200'"
+            >
+              Tous
+            </button>
+            <button
+              @click="acquisitionFilter = 'FREE'"
+              class="px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+              :class="acquisitionFilter === 'FREE' ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-bold' : 'text-slate-400 hover:text-slate-200'"
+            >
+              <Sparkles class="w-3.5 h-3.5 text-emerald-400" />
+              <span>Gratuits</span>
+            </button>
+            <button
+              @click="acquisitionFilter = 'PAID'"
+              class="px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+              :class="acquisitionFilter === 'PAID' ? 'bg-blue-950/80 text-blue-300 border border-blue-800 font-bold' : 'text-slate-400 hover:text-slate-200'"
+            >
+              <Store class="w-3.5 h-3.5 text-blue-400" />
+              <span>Payants</span>
+            </button>
+          </div>
+
+          <!-- 3. Flip-Flop Button: Cards / Grid vs Table View -->
+          <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+            <button
+              @click="viewMode = 'grid'"
+              class="p-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+              :class="viewMode === 'grid' ? 'bg-cyan-600 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-slate-200'"
+              title="Vue Cartes"
+            >
+              <LayoutGrid class="w-4 h-4" />
+              <span class="hidden sm:inline">Cartes</span>
+            </button>
+            <button
+              @click="viewMode = 'table'"
+              class="p-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+              :class="viewMode === 'table' ? 'bg-cyan-600 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-slate-200'"
+              title="Vue Tableau synthétique"
+            >
+              <List class="w-4 h-4" />
+              <span class="hidden sm:inline">Tableau</span>
+            </button>
+          </div>
+
+          <div class="text-xs font-mono text-slate-400 hidden xl:block">
+            {{ filteredGames.length }} jeu(x)
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Tournament Banner when filtered -->
+      <div
+        v-if="selectedTournament"
+        class="flex items-center justify-between p-2.5 px-4 rounded-xl bg-amber-950/30 border border-amber-500/40 text-xs text-amber-300 font-mono"
+      >
+        <div class="flex items-center gap-2">
+          <Trophy class="w-4 h-4 text-amber-400 shrink-0" />
+          <span>
+            Filtré sur le tournoi : <strong class="text-white">{{ selectedTournament.name }}</strong>
+            ({{ filteredGames.length }} jeu(x) au programme)
+          </span>
+        </div>
+        <button
+          @click="selectedTournamentId = ''"
+          class="text-[11px] underline text-amber-400 hover:text-amber-200 cursor-pointer"
+        >
+          Afficher tous les jeux
+        </button>
+      </div>
+    </div>
+
+    <!-- VIEW 1: GRID / CARDS VIEW -->
+    <div v-if="viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div
         v-for="game in filteredGames"
         :key="game.id"
@@ -386,25 +651,21 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
               </div>
 
               <div class="grid grid-cols-2 gap-2 text-xs font-mono">
-                <!-- GPU Score -->
                 <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
                   <span class="text-slate-400 text-[10px]">Min GPU</span>
                   <span class="text-purple-300 font-bold">{{ game.minGpuScore }} pts</span>
                 </div>
 
-                <!-- CPU Score -->
                 <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
                   <span class="text-slate-400 text-[10px]">Min CPU</span>
                   <span class="text-cyan-300 font-bold">{{ game.minCpuScore }} pts</span>
                 </div>
 
-                <!-- RAM -->
                 <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
                   <span class="text-slate-400 text-[10px]">Min RAM</span>
                   <span class="text-emerald-400 font-bold">{{ game.minRamGb }} Go</span>
                 </div>
 
-                <!-- VRAM -->
                 <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
                   <span class="text-slate-400 text-[10px]">Min VRAM</span>
                   <span class="text-purple-400 font-bold">{{ game.minVramGb }} Go</span>
@@ -453,6 +714,190 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
           </NuxtLink>
         </div>
       </div>
+    </div>
+
+    <!-- VIEW 2: HIGH-DENSITY TABLE VIEW -->
+    <div v-else class="cyber-card overflow-hidden border-slate-800 p-0">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs font-mono">
+          <thead>
+            <tr class="border-b border-slate-800 bg-slate-950/90 text-slate-400 uppercase text-[10px] tracking-wider">
+              <th class="py-3.5 px-4">Jeu</th>
+              <th class="py-3.5 px-4">Acquisition & Partage</th>
+              <th class="py-3.5 px-4">Tarif Effectif (Meilleur)</th>
+              <th class="py-3.5 px-4">Steam vs Clé</th>
+              <th class="py-3.5 px-4">Specs Min (GPU / CPU / RAM)</th>
+              <th class="py-3.5 px-4">Specs Rec (GPU / CPU / RAM)</th>
+              <th class="py-3.5 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/60 bg-slate-900/60">
+            <tr
+              v-for="game in filteredGames"
+              :key="game.id"
+              class="hover:bg-slate-800/50 transition-colors group"
+            >
+              <!-- 1. Jeu -->
+              <td class="py-3 px-4">
+                <div class="flex items-center gap-3">
+                  <img
+                    :src="game.coverUrl || 'https://placehold.co/100x140/0f172a/38bdf8?text=Jeu'"
+                    class="w-10 h-14 object-cover rounded-lg bg-slate-950 border border-slate-800 shrink-0 shadow"
+                    alt="cover"
+                  />
+                  <div class="min-w-0 max-w-[200px] sm:max-w-xs">
+                    <h4 class="font-bold text-sm text-white truncate group-hover:text-cyan-300 transition-colors">
+                      {{ game.name }}
+                    </h4>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                      <span v-if="game.steamAppId" class="text-[10px] text-blue-300 font-mono">
+                        #{{ game.steamAppId }}
+                      </span>
+                      <span v-if="game.genres" class="text-[10px] text-slate-400 font-mono truncate">
+                        {{ game.genres }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+
+              <!-- 2. Acquisition -->
+              <td class="py-3 px-4 whitespace-nowrap">
+                <div v-if="game.acquisitionType === 'FREE_TO_PLAY'">
+                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+                    <Sparkles class="w-3 h-3 text-emerald-400" />
+                    <span>Free-to-Play</span>
+                  </span>
+                </div>
+                <div v-else-if="game.acquisitionType === 'FRIEND_SHARE'" class="space-y-1">
+                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-purple-950/80 text-purple-300 border border-purple-800">
+                    <Users class="w-3 h-3 text-purple-400" />
+                    <span>Partage LAN</span>
+                  </span>
+                  <div v-if="game.friendDownloadUrl">
+                    <a
+                      :href="game.friendDownloadUrl.startsWith('http') ? game.friendDownloadUrl : undefined"
+                      :target="game.friendDownloadUrl.startsWith('http') ? '_blank' : undefined"
+                      class="inline-flex items-center gap-1 text-[10px] text-emerald-400 hover:underline max-w-[150px] truncate"
+                      :title="game.friendDownloadUrl"
+                    >
+                      <Download class="w-3 h-3 shrink-0" />
+                      <span class="truncate">Télécharger</span>
+                    </a>
+                  </div>
+                </div>
+                <div v-else>
+                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-950/80 text-blue-300 border border-blue-800">
+                    <Store class="w-3 h-3 text-blue-400" />
+                    <span>Achat Store</span>
+                  </span>
+                </div>
+              </td>
+
+              <!-- 3. Tarif Effectif -->
+              <td class="py-3 px-4 whitespace-nowrap">
+                <div class="flex flex-col">
+                  <span
+                    class="font-extrabold text-sm"
+                    :class="
+                      getEffectivePrice(game).is_free
+                        ? 'text-emerald-400'
+                        : 'text-cyan-300'
+                    "
+                  >
+                    {{ getEffectivePrice(game).display_price }}
+                  </span>
+                  <span class="text-[10px] text-slate-400">
+                    {{ getEffectivePrice(game).source_label }}
+                  </span>
+                </div>
+              </td>
+
+              <!-- 4. Steam vs Clé -->
+              <td class="py-3 px-4 whitespace-nowrap">
+                <div v-if="game.acquisitionType === 'STORE_BUY'" class="space-y-0.5 text-[11px]">
+                  <div class="text-blue-300">
+                    Steam : <strong>{{ formatCentsToPrice(game.steamPriceCents, game.currency) }}</strong>
+                  </div>
+                  <div class="text-emerald-400">
+                    Clé : <strong>{{ formatCentsToPrice(game.keyshopPriceCents, game.currency) }}</strong>
+                  </div>
+                  <div v-if="getEffectivePrice(game).savings_cents && getEffectivePrice(game).savings_cents! > 0" class="text-[10px] text-emerald-300 font-bold">
+                    -{{ getEffectivePrice(game).savings_percent }}% ({{ formatCentsToPrice(getEffectivePrice(game).savings_cents) }})
+                  </div>
+                </div>
+                <div v-else class="text-slate-500 text-[11px]">
+                  0,00 € (Inclus)
+                </div>
+              </td>
+
+              <!-- 5. Specs Min -->
+              <td class="py-3 px-4 whitespace-nowrap">
+                <div class="text-[11px] space-y-0.5">
+                  <div class="text-purple-300 font-bold">GPU: {{ game.minGpuScore }} pts</div>
+                  <div class="text-cyan-300">CPU: {{ game.minCpuScore }} pts</div>
+                  <div class="text-emerald-400">RAM: {{ game.minRamGb }} Go</div>
+                </div>
+              </td>
+
+              <!-- 6. Specs Rec -->
+              <td class="py-3 px-4 whitespace-nowrap">
+                <div class="text-[11px] space-y-0.5">
+                  <div class="text-purple-300 font-bold">GPU: {{ game.recGpuScore }} pts</div>
+                  <div class="text-cyan-300">CPU: {{ game.recCpuScore }} pts</div>
+                  <div class="text-emerald-400">RAM: {{ game.recRamGb }} Go</div>
+                </div>
+              </td>
+
+              <!-- 7. Actions -->
+              <td class="py-3 px-4 text-right whitespace-nowrap">
+                <div class="flex items-center justify-end gap-1.5">
+                  <button
+                    @click="refreshSingleGamePrices(game.id)"
+                    :disabled="refreshingPrices[game.id]"
+                    class="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-800 transition-all cursor-pointer disabled:opacity-50"
+                    title="Actualiser tarifs"
+                  >
+                    <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': refreshingPrices[game.id] }" />
+                  </button>
+                  <button
+                    @click="openEditModal(game)"
+                    class="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-800 transition-all cursor-pointer"
+                    title="Modifier"
+                  >
+                    <Edit2 class="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    @click="deleteGame(game.id, game.name)"
+                    class="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-800 transition-all cursor-pointer"
+                    title="Supprimer"
+                  >
+                    <Trash2 class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div
+      v-if="filteredGames.length === 0"
+      class="cyber-card p-12 text-center text-slate-400 space-y-3"
+    >
+      <Gamepad2 class="w-10 h-10 text-slate-600 mx-auto" />
+      <h3 class="text-base font-bold text-white">Aucun jeu ne correspond à vos filtres</h3>
+      <p class="text-xs text-slate-500 max-w-sm mx-auto">
+        Modifiez votre recherche, changez le filtre de tournoi ou importez de nouveaux jeux dans votre catalogue.
+      </p>
+      <button
+        @click="searchQuery = ''; selectedTournamentId = ''; acquisitionFilter = 'ALL'"
+        class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold cursor-pointer"
+      >
+        Réinitialiser tous les filtres
+      </button>
     </div>
 
     <!-- Game Modal -->
