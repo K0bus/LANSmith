@@ -3,7 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: k0bus/lansmith:latest
     container_name: lanforge_app
     restart: unless-stopped
     ports:
