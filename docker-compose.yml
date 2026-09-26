@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: k0bus/lansmith:latest
     container_name: lanforge_app
     restart: unless-stopped
     ports:
@@ -12,7 +13,10 @@ services:
         required: false
     environment:
       - NODE_ENV=production
+      - HOST=0.0.0.0
       - PORT=3000
+      - NITRO_HOST=0.0.0.0
+      - NITRO_PORT=3000
       - DATABASE_URL=file:/app/data/lanforge.db
       - NUXT_PUBLIC_APP_NAME=${NUXT_PUBLIC_APP_NAME:-LANSmith}
       - AUTO_SEED=${AUTO_SEED:-false}
@@ -21,8 +25,12 @@ services:
       - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET:-}
       - NUXT_TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID:-}
       - NUXT_TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET:-}
+      - ITAD_API_KEY=${ITAD_API_KEY:-}
+    networks:
+      - lanforge_network
+      - proxy
     volumes:
-      - lanforge_data:/app/data
+      - ${UNRAID_APP_DIR:-/mnt/user/app}/lansmith/data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/"]
       interval: 30s
@@ -37,8 +45,21 @@ services:
       - "traefik.http.routers.lansmith.tls.certresolver=letsencrypt"
       - "traefik.http.routers.lansmith.middlewares=authentik@file"
       - "traefik.http.services.lansmith.loadbalancer.server.port=3000"
+      - "folder.view3=03-Applications"
+      - "net.unraid.docker.icon=https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/lan-party.png"
       - "net.unraid.docker.webui=https://lansmith.${DOMAIN}"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+networks:
+  lanforge_network:
+    driver: bridge
+  proxy:
+    external: true
 
 volumes:
-  lanforge_data:  
+  lanforge_data:
     driver: local
+
