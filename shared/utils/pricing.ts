@@ -28,6 +28,20 @@ export function formatCentsToPrice(
 }
 
 /**
+ * Normalizes a game name into a clean URL slug (e.g. "Among Us" -> "among-us", "Left 4 Dead 2" -> "left-4-dead-2").
+ */
+export function slugifyGameName(name: string): string {
+  if (!name) return ''
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+/**
  * Calculates the effective price, source label, store links, savings and display formatting for a game.
  * Supports both camelCase and snake_case properties for compatibility.
  */
@@ -54,6 +68,7 @@ export function getEffectivePrice(
   const steamAppId = (game.steamAppId || game.steam_app_id || null) as string | null
   const customKeyshopUrl = (game.keyshopUrl || game.keyshop_url || null) as string | null
   const gameName = game.name || ''
+  const gameSlug = game.slug || (gameName ? slugifyGameName(gameName) : '')
 
   const lastUpdated = game.priceUpdatedAt || game.price_updated_at
     ? new Date(game.priceUpdatedAt || game.price_updated_at).toISOString()
@@ -78,7 +93,9 @@ export function getEffectivePrice(
 
   // Generated Store URLs
   const steamUrl = steamAppId ? `https://store.steampowered.com/app/${steamAppId}` : null
-  const keyshopUrl = customKeyshopUrl || (steamAppId ? `https://gg.deals/game/${steamAppId}` : (gameName ? `https://gg.deals/games/?title=${encodeURIComponent(gameName)}` : null))
+  const keyshopUrl =
+    customKeyshopUrl ||
+    (gameSlug ? `https://gg.deals/game/${gameSlug}/` : (gameName ? `https://gg.deals/games/?title=${encodeURIComponent(gameName)}` : null))
 
   // 1. FREE TO PLAY
   if (acquisitionType === 'FREE_TO_PLAY') {

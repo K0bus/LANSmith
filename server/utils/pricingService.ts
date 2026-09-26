@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { slugifyGameName } from '../../shared/utils/pricing'
 
 export interface SteamPriceResult {
   success: boolean
@@ -108,9 +109,12 @@ export async function fetchSteamPrice(appId: string): Promise<SteamPriceResult |
 export async function fetchKeyshopPrice(
   gameName: string,
   steamAppId?: string | null,
-  steamPriceCents?: number | null
+  steamPriceCents?: number | null,
+  slug?: string | null
 ): Promise<KeyshopPriceResult | null> {
   const apiKey = process.env.GGDEALS_API_KEY || process.env.GG_DEALS_API_KEY
+  const gameSlug = slug || (gameName ? slugifyGameName(gameName) : '')
+  const defaultDealUrl = gameSlug ? `https://gg.deals/game/${gameSlug}/` : (gameName ? `https://gg.deals/games/?title=${encodeURIComponent(gameName)}` : undefined)
 
   // 1. Production integration with GG.deals API if API key is provided
   if (apiKey) {
@@ -140,7 +144,7 @@ export async function fetchKeyshopPrice(
             priceCents,
             shopName: keyshopDeal.shopName || 'Marché gris (GG.deals)',
             currency: keyshopDeal.currency || 'EUR',
-            dealUrl: keyshopDeal.url,
+            dealUrl: keyshopDeal.url || defaultDealUrl,
             source: 'GG_DEALS_API'
           }
         }
@@ -162,7 +166,7 @@ export async function fetchKeyshopPrice(
       priceCents: estimatedCents,
       shopName: 'Meilleur revendeur de clés (estimation)',
       currency: 'EUR',
-      dealUrl: steamAppId ? `https://gg.deals/game/${steamAppId}` : undefined,
+      dealUrl: defaultDealUrl,
       source: 'MOCK_ESTIMATE'
     }
   }
@@ -219,7 +223,7 @@ export async function updateGamePrices(
   let keyshopUrl = game.keyshopUrl
 
   // 2. Fetch Keyshop Price
-  const keyshopData = await fetchKeyshopPrice(game.name, game.steamAppId, steamPriceCents)
+  const keyshopData = await fetchKeyshopPrice(game.name, game.steamAppId, steamPriceCents, game.slug)
   if (keyshopData && keyshopData.success) {
     keyshopPriceCents = keyshopData.priceCents
     if (!keyshopUrl && keyshopData.dealUrl) {
@@ -250,7 +254,7 @@ export async function updateGamePrices(
 /**
  * Fetch external prices on-the-fly without saving, for preview in UI modals.
  */
-export async function previewExternalPrices(steamAppId?: string | null, gameName: string = '') {
+export async function previewExternalPrices(steamAppId?: string | null, gameName: string = '', slug?: string | null) {
   let steamData: SteamPriceResult | null = null
   let keyshopData: KeyshopPriceResult | null = null
 
@@ -258,7 +262,7 @@ export async function previewExternalPrices(steamAppId?: string | null, gameName
     steamData = await fetchSteamPrice(steamAppId)
   }
 
-  keyshopData = await fetchKeyshopPrice(gameName, steamAppId, steamData?.priceCents)
+  keyshopData = await fetchKeyshopPrice(gameName, steamAppId, steamData?.priceCents, slug)
 
   return {
     steam: steamData,

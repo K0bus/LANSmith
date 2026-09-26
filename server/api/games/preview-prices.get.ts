@@ -5,6 +5,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const steamAppId = query.steamAppId ? String(query.steamAppId).trim() : null
   const name = query.name ? String(query.name).trim() : ''
+  const slug = query.slug ? String(query.slug).trim() : null
 
   if (!steamAppId && !name) {
     return {
@@ -14,6 +15,6 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const result = await previewExternalPrices(steamAppId, name)
+  const result = await previewExternalPrices(steamAppId, name, slug)
   return result
 })

@@ -45,17 +45,20 @@ console.log('✅ Test 3 validé !\n')
 // Test 4: STORE_BUY with Keyshop cheaper than Steam
 console.log('--- Test 4: Store Buy (Marché gris moins cher que Steam) ---')
 const deal = getEffectivePrice({
-  name: 'Age of Empires II',
+  name: 'Among Us',
   acquisitionType: 'STORE_BUY',
-  steamPriceCents: 1999,
-  keyshopPriceCents: 949,
+  steamPriceCents: 499,
+  keyshopPriceCents: 199,
   currency: 'EUR'
 })
 console.log('Store deal effective price:', deal)
-if (deal.is_free || deal.source !== 'KEYSHOP' || deal.savings_cents !== 1050 || deal.raw_cents !== 949) {
+if (deal.is_free || deal.source !== 'KEYSHOP' || deal.savings_cents !== 300 || deal.raw_cents !== 199) {
   throw new Error('Échec comparaison clés vs steam')
 }
-console.log('✅ Test 4 validé !\n')
+if (deal.keyshop_url !== 'https://gg.deals/game/among-us/') {
+  throw new Error(`Échec génération URL slug GG.deals: obtenu ${deal.keyshop_url}, attendu https://gg.deals/game/among-us/`)
+}
+console.log('✅ Test 4 validé (Lien GG.deals avec slug: https://gg.deals/game/among-us/) !\n')
 
 // Test 5: STORE_BUY with Steam cheaper than Keyshop
 console.log('--- Test 5: Store Buy (Steam promo moins cher que keyshop) ---')

@@ -276,7 +276,8 @@ async function fetchPricesForCurrentGame(force = true) {
       const res: any = await $fetch('/api/games/preview-prices', {
         params: {
           steamAppId: form.value.steamAppId || undefined,
-          name: form.value.name
+          name: form.value.name,
+          slug: form.value.slug || undefined
         }
       })
       if (res.steam?.success) {
