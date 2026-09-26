@@ -61,28 +61,37 @@ model BenchmarkCpu {
 }
 
 model Game {
-  id              String            @id @default(cuid())
-  igdbId          Int               @unique
-  name            String
-  slug            String
-  coverUrl        String?
-  summary         String?
-  genres          String?
+  id                String            @id @default(cuid())
+  igdbId            Int               @unique
+  name              String
+  slug              String
+  coverUrl          String?
+  summary           String?
+  genres            String?
+  steamAppId        String?
   
   // Requirements chiffrés pour le matching
-  minCpuScore     Int               @default(0)
-  recCpuScore     Int               @default(0)
-  minGpuScore     Int               @default(0)
-  recGpuScore     Int               @default(0)
-  minRamGb        Int               @default(8)
-  recRamGb        Int               @default(16)
-  minVramGb       Int               @default(2)
-  recVramGb       Int               @default(6)
+  minCpuScore       Int               @default(0)
+  recCpuScore       Int               @default(0)
+  minGpuScore       Int               @default(0)
+  recGpuScore       Int               @default(0)
+  minRamGb          Int               @default(8)
+  recRamGb          Int               @default(16)
+  minVramGb         Int               @default(2)
+  recVramGb         Int               @default(6)
   
-  tournaments     Tournament[]
-  tournamentGames TournamentGame[]
-  scores          TournamentScore[]
-  createdAt       DateTime          @default(now())
+  // Suivi dynamique des prix et modes d'acquisition
+  steamPriceCents   Int?              @map("steam_price_cents")
+  keyshopPriceCents Int?              @map("keyshop_price_cents")
+  currency          String            @default("EUR")
+  priceUpdatedAt    DateTime?         @map("price_updated_at")
+  acquisitionType   String            @default("STORE_BUY") @map("acquisition_type") // STORE_BUY, FREE_TO_PLAY, FRIEND_SHARE
+  friendDownloadUrl String?           @map("friend_download_url")
+  
+  tournaments       Tournament[]
+  tournamentGames   TournamentGame[]
+  scores            TournamentScore[]
+  createdAt         DateTime          @default(now())
 }
 
 model Tournament {

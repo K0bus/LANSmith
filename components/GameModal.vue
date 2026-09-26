@@ -14,19 +14,33 @@ import {
   Layers,
   Info,
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  Tag,
+  Share2,
+  Download,
+  RefreshCw,
+  Coins,
+  Store,
+  Users,
+  Link,
+  AlertCircle
 } from 'lucide-vue-next'
 import type { IgdbGameSearchResult } from '~/server/utils/igdb'
+import { getEffectivePrice, formatCentsToPrice } from '~/shared/utils/pricing'
 
-const props = defineProps<{
+interface GameModalProps {
   isOpen: boolean
   gameToEdit?: any
-}>()
+}
 
-const emit = defineEmits<{
+const props = defineProps<GameModalProps>()
+
+interface GameModalEmits {
   (e: 'close'): void
   (e: 'saved'): void
-}>()
+}
+
+const emit = defineEmits<GameModalEmits>()
 
 const activeTab = ref<'search' | 'hardware'>('search')
 const searchQuery = ref('')
@@ -44,6 +58,13 @@ const form = ref({
   coverUrl: '',
   genres: '',
   summary: '',
+  steamAppId: '',
+  steamPriceCents: null as number | null,
+  keyshopPriceCents: null as number | null,
+  currency: 'EUR',
+  acquisitionType: 'STORE_BUY' as 'STORE_BUY' | 'FREE_TO_PLAY' | 'FRIEND_SHARE',
+  friendDownloadUrl: '',
+  priceUpdatedAt: null as string | null,
   minCpuName: 'Intel Core i5-7400',
   minCpuScore: 2000,
   recCpuName: 'AMD Ryzen 5 5600X',
@@ -60,6 +81,10 @@ const form = ref({
 
 const isSubmitting = ref(false)
 const errorMessage = ref('')
+
+// Price fetching state
+const isFetchingPrices = ref(false)
+const priceFetchMessage = ref('')
 
 // Hardware autocomplete search state
 const minGpuQuery = ref('')
@@ -193,11 +218,89 @@ function applyPreset(presetType: 'light' | 'competitive' | 'heavy') {
   recCpuQuery.value = form.value.recCpuName
 }
 
+// Effective price helper computed
+const effectivePrice = computed(() => {
+  return getEffectivePrice(form.value)
+})
+
+// Quick toggle helper for Friend Share
+const isFriendShareChecked = computed({
+  get: () => form.value.acquisitionType === 'FRIEND_SHARE',
+  set: (val: boolean) => {
+    form.value.acquisitionType = val ? 'FRIEND_SHARE' : 'STORE_BUY'
+  }
+})
+
+// Conversion helper for euros <-> cents inputs
+const steamPriceEuros = computed({
+  get: () => (form.value.steamPriceCents !== null ? (form.value.steamPriceCents / 100).toFixed(2) : ''),
+  set: (val: string) => {
+    const num = parseFloat(val.replace(',', '.'))
+    form.value.steamPriceCents = isNaN(num) ? null : Math.round(num * 100)
+  }
+})
+
+const keyshopPriceEuros = computed({
+  get: () => (form.value.keyshopPriceCents !== null ? (form.value.keyshopPriceCents / 100).toFixed(2) : ''),
+  set: (val: string) => {
+    const num = parseFloat(val.replace(',', '.'))
+    form.value.keyshopPriceCents = isNaN(num) ? null : Math.round(num * 100)
+  }
+})
+
+async function fetchPricesForCurrentGame(force = true) {
+  if (!form.value.steamAppId && !form.value.name) return
+  isFetchingPrices.value = true
+  priceFetchMessage.value = ''
+  try {
+    if (form.value.id) {
+      const res: any = await $fetch(`/api/games/${form.value.id}/refresh-prices`, {
+        method: 'POST',
+        body: { force }
+      })
+      if (res.game) {
+        form.value.steamPriceCents = res.game.steamPriceCents
+        form.value.keyshopPriceCents = res.game.keyshopPriceCents
+        form.value.currency = res.game.currency || 'EUR'
+        form.value.priceUpdatedAt = res.game.priceUpdatedAt
+        if (res.game.acquisitionType) {
+          form.value.acquisitionType = res.game.acquisitionType as any
+        }
+        priceFetchMessage.value = res.message || 'Prix actualisés avec succès !'
+      }
+    } else {
+      const res: any = await $fetch('/api/games/preview-prices', {
+        params: {
+          steamAppId: form.value.steamAppId || undefined,
+          name: form.value.name
+        }
+      })
+      if (res.steam?.success) {
+        form.value.steamPriceCents = res.steam.priceCents
+        form.value.currency = res.steam.currency || 'EUR'
+        if (res.steam.isFree && form.value.acquisitionType === 'STORE_BUY') {
+          form.value.acquisitionType = 'FREE_TO_PLAY'
+        }
+      }
+      if (res.keyshop?.success) {
+        form.value.keyshopPriceCents = res.keyshop.priceCents
+      }
+      form.value.priceUpdatedAt = res.fetchedAt
+      priceFetchMessage.value = 'Tarifs récupérés avec succès !'
+    }
+  } catch (err: any) {
+    priceFetchMessage.value = 'Erreur lors de la récupération des prix.'
+  } finally {
+    isFetchingPrices.value = false
+  }
+}
+
 watch(
   () => props.isOpen,
   (open) => {
     if (open) {
       errorMessage.value = ''
+      priceFetchMessage.value = ''
       if (props.gameToEdit) {
         activeTab.value = 'hardware'
         const g = props.gameToEdit
@@ -209,6 +312,13 @@ watch(
           coverUrl: g.coverUrl || '',
           genres: g.genres || '',
           summary: g.summary || '',
+          steamAppId: g.steamAppId || '',
+          steamPriceCents: g.steamPriceCents !== undefined ? g.steamPriceCents : null,
+          keyshopPriceCents: g.keyshopPriceCents !== undefined ? g.keyshopPriceCents : null,
+          currency: g.currency || 'EUR',
+          acquisitionType: (g.acquisitionType || 'STORE_BUY') as any,
+          friendDownloadUrl: g.friendDownloadUrl || '',
+          priceUpdatedAt: g.priceUpdatedAt || null,
           minCpuName: 'CPU Minimal Requis',
           minCpuScore: g.minCpuScore || 2000,
           recCpuName: 'CPU Recommandé',
@@ -239,6 +349,13 @@ watch(
           coverUrl: '',
           genres: '',
           summary: '',
+          steamAppId: '',
+          steamPriceCents: null,
+          keyshopPriceCents: null,
+          currency: 'EUR',
+          acquisitionType: 'STORE_BUY',
+          friendDownloadUrl: '',
+          priceUpdatedAt: null,
           minCpuName: 'Intel Core i5-7400',
           minCpuScore: 2000,
           recCpuName: 'AMD Ryzen 5 5600X',
@@ -287,6 +404,13 @@ function selectIgdbResult(game: IgdbGameSearchResult) {
     coverUrl: game.coverUrl || '',
     genres: game.genres || '',
     summary: game.summary || '',
+    steamAppId: game.steamAppId || '',
+    steamPriceCents: null,
+    keyshopPriceCents: null,
+    currency: 'EUR',
+    acquisitionType: 'STORE_BUY',
+    friendDownloadUrl: '',
+    priceUpdatedAt: null,
     minCpuName: game.rawRequirements?.minCpu || 'CPU Min (Estimé)',
     minCpuScore: game.minCpuScore || 2000,
     recCpuName: game.rawRequirements?.recCpu || 'CPU Rec (Estimé)',
@@ -305,6 +429,11 @@ function selectIgdbResult(game: IgdbGameSearchResult) {
   minCpuQuery.value = form.value.minCpuName
   recCpuQuery.value = form.value.recCpuName
   activeTab.value = 'hardware'
+
+  // Pre-fetch prices immediately if steamAppId is detected
+  if (game.steamAppId || game.name) {
+    fetchPricesForCurrentGame(false)
+  }
 }
 
 async function submitForm() {
@@ -322,7 +451,14 @@ async function submitForm() {
       slug: form.value.slug.trim() || form.value.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       igdbId: form.value.igdbId ? Number(form.value.igdbId) : undefined,
       coverUrl: form.value.coverUrl?.trim() || null,
+      genres: form.value.genres?.trim() || null,
       summary: form.value.summary?.trim() || null,
+      steamAppId: form.value.steamAppId?.trim() || null,
+      steamPriceCents: form.value.steamPriceCents !== null ? Number(form.value.steamPriceCents) : null,
+      keyshopPriceCents: form.value.keyshopPriceCents !== null ? Number(form.value.keyshopPriceCents) : null,
+      currency: form.value.currency || 'EUR',
+      acquisitionType: form.value.acquisitionType || 'STORE_BUY',
+      friendDownloadUrl: form.value.friendDownloadUrl?.trim() || null,
       minCpuScore: Number(form.value.minCpuScore) || 0,
       recCpuScore: Number(form.value.recCpuScore) || 0,
       minGpuScore: Number(form.value.minGpuScore) || 0,
@@ -370,10 +506,10 @@ async function submitForm() {
           <div>
             <h2 class="text-xl font-bold text-white flex items-center gap-2">
               <Gamepad2 class="w-5 h-5 text-cyan-400" />
-              <span>{{ gameToEdit ? 'Modifier les spécifications du jeu' : 'Ajouter un Jeu au Catalogue' }}</span>
+              <span>{{ gameToEdit ? 'Modifier les données & tarification du jeu' : 'Ajouter un Jeu au Catalogue' }}</span>
             </h2>
             <p class="text-xs text-slate-400 mt-0.5">
-              Consultation des données IGDB & Matching matériel assisté par les scores de benchmark
+              Consultation IGDB, suivi dynamique des prix (Steam / Clés) & options de partage LAN
             </p>
           </div>
           <button
@@ -411,7 +547,7 @@ async function submitForm() {
             "
           >
             <Sliders class="w-4 h-4" />
-            <span>2. Matching Matériel & Exigences (Admin)</span>
+            <span>2. Spécifications & Tarification (Admin)</span>
           </button>
         </div>
 
@@ -490,7 +626,7 @@ async function submitForm() {
                   class="mt-2 p-2 rounded-lg bg-slate-900/90 border border-slate-800/80 text-[11px] font-mono space-y-1"
                 >
                   <div class="text-blue-400 font-bold text-[10px] uppercase flex items-center gap-1">
-                    <span>⚡ Prérequis Steam Détectés & Calibrés :</span>
+                    <span>⚡ Prérequis Steam Détectés :</span>
                   </div>
                   <div class="text-slate-300 text-[10px] truncate">
                     <span class="text-slate-500">Min:</span> {{ game.rawRequirements.minCpu || 'N/A' }} | {{ game.rawRequirements.minGpu || 'N/A' }} ({{ game.rawRequirements.minRamGb || game.minRamGb }} Go RAM)
@@ -502,7 +638,7 @@ async function submitForm() {
                   <span class="text-cyan-300">CPU : {{ game.minCpuScore }} pts</span>
                   <span class="text-emerald-300">RAM : {{ game.minRamGb }} Go</span>
                   <span class="ml-auto text-cyan-400 font-bold group-hover:translate-x-1 transition-transform">
-                    Sélectionner & Matcher →
+                    Sélectionner & Configurer →
                   </span>
                 </div>
               </div>
@@ -510,8 +646,8 @@ async function submitForm() {
           </div>
         </div>
 
-        <!-- TAB 2: HARDWARE MATCHING (ADMIN) -->
-        <form v-else @submit.prevent="submitForm" class="mt-5 space-y-6">
+        <!-- TAB 2: HARDWARE & PRICING (ADMIN) -->
+        <form v-else @submit.prevent="submitForm" class="mt-5 space-y-6 max-h-[70vh] overflow-y-auto pr-1">
           <div v-if="errorMessage" class="p-3 rounded-lg bg-rose-950/50 border border-rose-800 text-rose-300 text-xs">
             {{ errorMessage }}
           </div>
@@ -525,8 +661,8 @@ async function submitForm() {
             />
 
             <div class="flex-1 space-y-3">
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="sm:col-span-2">
                   <label class="block text-xs font-semibold text-slate-300 mb-1">Titre du jeu *</label>
                   <input
                     v-model="form.name"
@@ -546,17 +682,274 @@ async function submitForm() {
                 </div>
               </div>
 
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-300 mb-1">Genres</label>
+                  <input
+                    v-model="form.genres"
+                    type="text"
+                    placeholder="Ex: FPS, Tactique, Multijoueur"
+                    class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-cyan-300 font-mono"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-300 mb-1">URL de la Cover / Affiche</label>
+                  <input
+                    v-model="form.coverUrl"
+                    type="text"
+                    placeholder="https://images.igdb.com/..."
+                    class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-slate-300 font-mono truncate"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label class="block text-[11px] text-slate-400 mb-1 flex items-center gap-1.5">
                   <Info class="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Données & Description rédigées dans IGDB :</span>
+                  <span>Description du jeu :</span>
                 </label>
                 <textarea
                   v-model="form.summary"
                   rows="2"
                   class="w-full px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-xs text-slate-300"
-                  placeholder="Texte descriptif ou prérequis mentionnés sur la fiche IGDB..."
+                  placeholder="Texte descriptif du jeu..."
                 />
+              </div>
+            </div>
+          </div>
+
+          <!-- Section B : TARIFICATION DYNAMIQUE & MODE D'ACQUISITION (FEATURE) -->
+          <div class="p-4 rounded-xl bg-slate-950/80 border border-cyan-500/30 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h4 class="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                <Coins class="w-4 h-4 text-cyan-400" />
+                <span>Suivi Dynamique des Prix & Acquisition Groupe</span>
+              </h4>
+              <div class="flex items-center gap-2">
+                <span v-if="priceFetchMessage" class="text-[11px] font-mono text-cyan-300">
+                  {{ priceFetchMessage }}
+                </span>
+                <button
+                  type="button"
+                  @click="fetchPricesForCurrentGame(true)"
+                  :disabled="isFetchingPrices"
+                  class="px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+                >
+                  <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': isFetchingPrices }" />
+                  <span>{{ isFetchingPrices ? 'Actualisation...' : 'Actualiser les tarifs' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Mode d'acquisition Selector -->
+            <div class="space-y-2">
+              <label class="block text-xs font-semibold text-slate-300">
+                Mode d'acquisition par défaut pour les participants du groupe :
+              </label>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <!-- Option 1: STORE_BUY -->
+                <label
+                  class="flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all"
+                  :class="
+                    form.acquisitionType === 'STORE_BUY'
+                      ? 'bg-blue-950/40 border-blue-500 text-white font-bold shadow'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                  "
+                >
+                  <input
+                    type="radio"
+                    v-model="form.acquisitionType"
+                    value="STORE_BUY"
+                    class="text-blue-500 focus:ring-0"
+                  />
+                  <Store class="w-4 h-4 text-blue-400 shrink-0" />
+                  <div>
+                    <div class="text-xs text-white">Achat Store / Clé</div>
+                    <div class="text-[10px] text-slate-400 font-normal">Tarif comparé Steam vs Revendeur</div>
+                  </div>
+                </label>
+
+                <!-- Option 2: FREE_TO_PLAY -->
+                <label
+                  class="flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all"
+                  :class="
+                    form.acquisitionType === 'FREE_TO_PLAY'
+                      ? 'bg-emerald-950/40 border-emerald-500 text-white font-bold shadow'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                  "
+                >
+                  <input
+                    type="radio"
+                    v-model="form.acquisitionType"
+                    value="FREE_TO_PLAY"
+                    class="text-emerald-500 focus:ring-0"
+                  />
+                  <Sparkles class="w-4 h-4 text-emerald-400 shrink-0" />
+                  <div>
+                    <div class="text-xs text-white">Free-to-Play (F2P)</div>
+                    <div class="text-[10px] text-slate-400 font-normal">Gratuit pour tout le monde (0,00 €)</div>
+                  </div>
+                </label>
+
+                <!-- Option 3: FRIEND_SHARE -->
+                <label
+                  class="flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all"
+                  :class="
+                    form.acquisitionType === 'FRIEND_SHARE'
+                      ? 'bg-purple-950/40 border-purple-500 text-white font-bold shadow'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                  "
+                >
+                  <input
+                    type="radio"
+                    v-model="form.acquisitionType"
+                    value="FRIEND_SHARE"
+                    class="text-purple-500 focus:ring-0"
+                  />
+                  <Users class="w-4 h-4 text-purple-400 shrink-0" />
+                  <div>
+                    <div class="text-xs text-white">Partage entre amis</div>
+                    <div class="text-[10px] text-slate-400 font-normal">Gratuit via stockage / guide LAN</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Toggle rapide Partage entre amis -->
+            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+              <div class="flex items-center gap-2.5">
+                <Share2 class="w-4 h-4 text-purple-400" />
+                <div>
+                  <div class="text-xs font-bold text-white">
+                    Téléchargement / Partage entre amis disponible
+                  </div>
+                  <div class="text-[10px] text-slate-400">
+                    Bascule le jeu en gratuit pour le groupe avec accès aux fichiers locaux ou instructions.
+                  </div>
+                </div>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  v-model="isFriendShareChecked"
+                  class="sr-only peer"
+                />
+                <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+              </label>
+            </div>
+
+            <!-- Champ conditionnel : Friend Download URL -->
+            <div
+              v-if="form.acquisitionType === 'FRIEND_SHARE'"
+              class="p-3.5 rounded-xl bg-purple-950/20 border border-purple-500/40 space-y-2 animate-fadeIn"
+            >
+              <label class="block text-xs font-semibold text-purple-300 flex items-center gap-1.5">
+                <Link class="w-3.5 h-3.5 text-purple-400" />
+                <span>Lien de téléchargement / Partage interne ou guide d'installation :</span>
+              </label>
+              <div class="flex gap-2">
+                <input
+                  v-model="form.friendDownloadUrl"
+                  type="text"
+                  placeholder="Ex: \\NAS-LAN\Jeux\CS2 ou https://lan.internal/games/pack.zip ou Guide Discord"
+                  class="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-purple-800/80 text-xs text-white placeholder-slate-500 font-mono"
+                />
+                <a
+                  v-if="form.friendDownloadUrl && form.friendDownloadUrl.startsWith('http')"
+                  :href="form.friendDownloadUrl"
+                  target="_blank"
+                  class="px-3 py-2 rounded-lg bg-purple-900/60 hover:bg-purple-800 text-purple-200 text-xs flex items-center gap-1"
+                >
+                  <ExternalLink class="w-3.5 h-3.5" />
+                  <span>Tester</span>
+                </a>
+              </div>
+              <p class="text-[10px] text-purple-300/80">
+                Ce lien sera affiché directement sur la fiche du jeu avec un badge vert pour faciliter l'installation par tous les joueurs.
+              </p>
+            </div>
+
+            <!-- Détails des prix Steam & Marché Gris -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <!-- Steam App ID -->
+              <div class="space-y-1">
+                <label class="block text-[11px] font-semibold text-slate-300 flex items-center justify-between">
+                  <span>Steam App ID</span>
+                  <a
+                    v-if="form.steamAppId"
+                    :href="`https://store.steampowered.com/app/${form.steamAppId}`"
+                    target="_blank"
+                    class="text-[10px] text-blue-400 hover:underline flex items-center gap-0.5"
+                  >
+                    <span>Store</span>
+                    <ExternalLink class="w-2.5 h-2.5" />
+                  </a>
+                </label>
+                <input
+                  v-model="form.steamAppId"
+                  type="text"
+                  placeholder="Ex: 730"
+                  class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-blue-300 font-mono"
+                />
+              </div>
+
+              <!-- Prix Steam (€) -->
+              <div class="space-y-1">
+                <label class="block text-[11px] font-semibold text-slate-300">
+                  Prix Steam officiel (€)
+                </label>
+                <div class="relative">
+                  <input
+                    v-model="steamPriceEuros"
+                    type="text"
+                    placeholder="Ex: 29.99 ou 0"
+                    class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono"
+                  />
+                  <span class="absolute right-3 top-1.5 text-xs text-slate-500">EUR</span>
+                </div>
+                <div class="text-[10px] text-slate-500 font-mono">
+                  {{ form.steamPriceCents !== null ? `${form.steamPriceCents} centimes` : 'Non renseigné' }}
+                </div>
+              </div>
+
+              <!-- Prix Marché Gris (€) -->
+              <div class="space-y-1">
+                <label class="block text-[11px] font-semibold text-slate-300">
+                  Meilleur prix Clé revendeur (€)
+                </label>
+                <div class="relative">
+                  <input
+                    v-model="keyshopPriceEuros"
+                    type="text"
+                    placeholder="Ex: 14.50"
+                    class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono"
+                  />
+                  <span class="absolute right-3 top-1.5 text-xs text-slate-500">EUR</span>
+                </div>
+                <div class="text-[10px] text-slate-500 font-mono">
+                  {{ form.keyshopPriceCents !== null ? `${form.keyshopPriceCents} centimes` : 'Non renseigné' }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Synthèse du Tarif Effectif Calculé -->
+            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <Tag class="w-4 h-4 text-cyan-400" />
+                <span class="text-xs text-slate-300">Tarif effectif affiché aux joueurs :</span>
+                <span
+                  class="px-2 py-0.5 rounded text-xs font-bold font-mono"
+                  :class="
+                    effectivePrice.is_free
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                      : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+                  "
+                >
+                  {{ effectivePrice.display_price }} ({{ effectivePrice.source_label }})
+                </span>
+              </div>
+              <div v-if="effectivePrice.savings_cents && effectivePrice.savings_cents > 0" class="text-[11px] font-mono text-emerald-400">
+                Économie de {{ formatCentsToPrice(effectivePrice.savings_cents) }} (-{{ effectivePrice.savings_percent }}%)
               </div>
             </div>
           </div>
@@ -565,7 +958,7 @@ async function submitForm() {
           <div class="flex items-center justify-between p-3 rounded-xl bg-slate-950/60 border border-slate-800">
             <span class="text-xs font-mono text-slate-400 flex items-center gap-1.5">
               <Sparkles class="w-3.5 h-3.5 text-brand-400" />
-              <span>Presets Rapides de Profils :</span>
+              <span>Presets Rapides de Profils Matériels :</span>
             </span>
             <div class="flex gap-2">
               <button
@@ -592,7 +985,7 @@ async function submitForm() {
             </div>
           </div>
 
-          <!-- Section B : Spécifications MINIMALES (Matching avec Benchmarks) -->
+          <!-- Section C : Spécifications MINIMALES (Matching avec Benchmarks) -->
           <div class="p-4 rounded-xl bg-slate-950/70 border border-amber-500/30 space-y-4">
             <div class="flex items-center justify-between border-b border-slate-800 pb-2">
               <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
@@ -732,7 +1125,7 @@ async function submitForm() {
             </div>
           </div>
 
-          <!-- Section C : Spécifications RECOMMANDÉES (Optimal 1080p/1440p) -->
+          <!-- Section D : Spécifications RECOMMANDÉES (Optimal 1080p/1440p) -->
           <div class="p-4 rounded-xl bg-slate-950/70 border border-emerald-500/30 space-y-4">
             <div class="flex items-center justify-between border-b border-slate-800 pb-2">
               <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">

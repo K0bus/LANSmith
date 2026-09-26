@@ -59,17 +59,51 @@ export interface ParticipantWithRig {
 
 export type ScoringType = 'SCOREBOARD' | 'WIN_LOSE' | 'ROUND_ROBIN'
 
+export type AcquisitionType = 'STORE_BUY' | 'FREE_TO_PLAY' | 'FRIEND_SHARE'
+
+export type PriceSource = 'FREE_TO_PLAY' | 'FRIEND_SHARE' | 'STEAM' | 'KEYSHOP' | 'UNAVAILABLE'
+
+export interface EffectivePrice {
+  is_free: boolean
+  display_price: string
+  raw_cents: number | null
+  currency: string
+  source: PriceSource
+  source_label: string
+  steam_price_formatted?: string | null
+  keyshop_price_formatted?: string | null
+  savings_cents?: number | null
+  savings_percent?: number | null
+  friend_download_url?: string | null
+  last_updated?: string | null
+}
+
 export interface GameItem {
   id: string
   igdbId: number | null
   name: string
+  slug?: string
   coverUrl: string | null
   genres: string | null
   summary: string | null
+  steamAppId?: string | null
   minRamGb: number
+  recRamGb?: number
   minVramGb: number
-  minGpuTier: number
-  minCpuTier: number
+  recVramGb?: number
+  minGpuScore?: number
+  recGpuScore?: number
+  minCpuScore?: number
+  recCpuScore?: number
+  minGpuTier?: number
+  minCpuTier?: number
+  // Pricing fields
+  steamPriceCents?: number | null
+  keyshopPriceCents?: number | null
+  currency?: string
+  priceUpdatedAt?: string | Date | null
+  acquisitionType?: AcquisitionType | string
+  friendDownloadUrl?: string | null
 }
 
 export interface RoundScoreItem {
