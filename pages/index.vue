@@ -11,7 +11,10 @@ import {
   RefreshCw,
   Cpu,
   Monitor,
-  Award
+  Award,
+  Trophy,
+  ChevronDown,
+  X
 } from 'lucide-vue-next'
 import CompatibilityBadge from '~/components/CompatibilityBadge.vue'
 import HardwareBadge from '~/components/HardwareBadge.vue'
@@ -20,20 +23,73 @@ import GameModal from '~/components/GameModal.vue'
 
 // Fetch matrix data
 const { data: matrixData, pending, refresh } = await useFetch<any>('/api/compatibility/matrix')
+const { data: tournaments, refresh: refreshTournaments } = await useFetch<any[]>('/api/tournaments')
 
-const showLanReadyOnly = ref(false)
+const selectedTournamentId = ref<string>('')
+const readinessFilter = ref<'all' | 'ready' | 'not_ready'>('all')
 const searchQuery = ref('')
 const isParticipantModalOpen = ref(false)
 const isGameModalOpen = ref(false)
 
-const filteredGames = computed(() => {
-  if (!matrixData.value?.games) return []
-  if (!showLanReadyOnly.value) return matrixData.value.games
-
-  return matrixData.value.games.filter((g: any) => {
-    return matrixData.value.gameStats[g.id]?.is100PercentReady
-  })
+const selectedTournament = computed(() => {
+  if (!selectedTournamentId.value || !tournaments.value) return null
+  return tournaments.value.find((t: any) => t.id === selectedTournamentId.value) || null
 })
+
+const tournamentGameIds = computed(() => {
+  if (!selectedTournament.value) return null
+  const ids = new Set<string>()
+  const t = selectedTournament.value
+  if (t.tournamentGames && t.tournamentGames.length > 0) {
+    t.tournamentGames.forEach((tg: any) => {
+      if (tg.gameId) ids.add(tg.gameId)
+      if (tg.game?.id) ids.add(tg.game.id)
+    })
+  } else if (t.games && t.games.length > 0) {
+    t.games.forEach((g: any) => ids.add(g.id))
+  }
+  return ids
+})
+
+const gamesInTournamentScope = computed(() => {
+  if (!matrixData.value?.games) return []
+  if (tournamentGameIds.value !== null) {
+    return matrixData.value.games.filter((g: any) => tournamentGameIds.value!.has(g.id))
+  }
+  return matrixData.value.games
+})
+
+const readyCount = computed(() => {
+  return gamesInTournamentScope.value.filter(
+    (g: any) => matrixData.value?.gameStats[g.id]?.is100PercentReady
+  ).length
+})
+
+const notReadyCount = computed(() => {
+  return gamesInTournamentScope.value.filter(
+    (g: any) => !matrixData.value?.gameStats[g.id]?.is100PercentReady
+  ).length
+})
+
+const filteredGames = computed(() => {
+  let games = gamesInTournamentScope.value
+
+  if (readinessFilter.value === 'ready') {
+    games = games.filter((g: any) => matrixData.value?.gameStats[g.id]?.is100PercentReady)
+  } else if (readinessFilter.value === 'not_ready') {
+    games = games.filter((g: any) => !matrixData.value?.gameStats[g.id]?.is100PercentReady)
+  }
+
+  return games
+})
+
+function toggleReadiness(type: 'ready' | 'not_ready') {
+  if (readinessFilter.value === type) {
+    readinessFilter.value = 'all'
+  } else {
+    readinessFilter.value = type
+  }
+}
 
 const filteredParticipants = computed(() => {
   if (!matrixData.value?.participants) return []
@@ -50,6 +106,12 @@ const filteredParticipants = computed(() => {
 
 function onDataSaved() {
   refresh()
+  refreshTournaments()
+}
+
+function handleRefresh() {
+  refresh()
+  refreshTournaments()
 }
 </script>
 
@@ -98,28 +160,86 @@ function onDataSaved() {
 
     <!-- Controls bar -->
     <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2.5">
+        <!-- Tournament Filter Select -->
+        <div class="relative flex items-center">
+          <div class="relative">
+            <Trophy class="w-3.5 h-3.5 text-amber-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <select
+              v-model="selectedTournamentId"
+              class="pl-9 pr-8 py-2 rounded-xl text-xs font-semibold bg-slate-900 border text-slate-300 focus:outline-none focus:border-amber-500/50 appearance-none cursor-pointer transition-all shadow-sm max-w-[220px] sm:max-w-xs truncate"
+              :class="
+                selectedTournamentId
+                  ? 'border-amber-500/50 bg-amber-500/10 text-amber-200'
+                  : 'border-slate-800 hover:border-slate-700'
+              "
+            >
+              <option value="" class="bg-slate-900 text-slate-300">Tous les tournois (Tous les jeux)</option>
+              <option
+                v-for="t in tournaments"
+                :key="t.id"
+                :value="t.id"
+                class="bg-slate-900 text-white"
+              >
+                🏆 {{ t.name }} ({{ t.tournamentGames?.length || t.games?.length || 0 }} jeux)
+              </option>
+            </select>
+            <ChevronDown class="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+          <button
+            v-if="selectedTournamentId"
+            @click="selectedTournamentId = ''"
+            class="ml-1.5 p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer border border-slate-700"
+            title="Effacer le filtre tournoi"
+          >
+            <X class="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <!-- 100% Ready Filter -->
         <button
-          @click="showLanReadyOnly = !showLanReadyOnly"
+          @click="toggleReadiness('ready')"
           class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-all cursor-pointer"
           :class="
-            showLanReadyOnly
+            readinessFilter === 'ready'
               ? 'bg-brand-500/20 text-brand-300 border-brand-500/50 shadow-glow-emerald'
               : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
           "
+          title="Afficher uniquement les jeux où 100% des participants sont compatibles"
         >
           <Filter class="w-3.5 h-3.5" />
-          <span>100% LAN Ready Uniquement</span>
+          <span>100% Proof</span>
           <span
-            v-if="matrixData?.summary?.lanReadyCount"
-            class="px-1.5 py-0.2 rounded bg-brand-500/30 text-brand-300 text-[10px]"
+            class="px-1.5 py-0.2 rounded text-[10px]"
+            :class="readinessFilter === 'ready' ? 'bg-brand-500/40 text-brand-200' : 'bg-slate-800 text-slate-400'"
           >
-            {{ matrixData.summary.lanReadyCount }}
+            {{ readyCount }}
+          </span>
+        </button>
+
+        <!-- Inverted Filter: Not 100% Proof (Bottlenecks/Issues) -->
+        <button
+          @click="toggleReadiness('not_ready')"
+          class="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-all cursor-pointer"
+          :class="
+            readinessFilter === 'not_ready'
+              ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-glow-rose'
+              : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+          "
+          title="Afficher uniquement les jeux ayant des incompatibilités matérielles (<100% prêts)"
+        >
+          <ShieldAlert class="w-3.5 h-3.5" :class="readinessFilter === 'not_ready' ? 'text-rose-400' : 'text-slate-400'" />
+          <span>Non 100% Proof</span>
+          <span
+            class="px-1.5 py-0.2 rounded text-[10px]"
+            :class="readinessFilter === 'not_ready' ? 'bg-rose-500/40 text-rose-200' : 'bg-slate-800 text-slate-400'"
+          >
+            {{ notReadyCount }}
           </span>
         </button>
 
         <button
-          @click="refresh()"
+          @click="handleRefresh()"
           class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
           title="Actualiser la matrice"
         >
@@ -152,6 +272,14 @@ function onDataSaved() {
                   <span>Joueur & Configuration</span>
                   <span class="text-slate-500 text-[10px]">{{ filteredParticipants.length }} joueurs</span>
                 </div>
+              </th>
+
+              <!-- Empty Game Column Header if 0 games match -->
+              <th
+                v-if="filteredGames.length === 0"
+                class="p-6 text-center text-slate-500 text-xs font-mono italic"
+              >
+                Aucun jeu pour cette sélection
               </th>
 
               <!-- Game Column Headers -->
@@ -229,6 +357,14 @@ function onDataSaved() {
                 </div>
               </td>
 
+              <!-- Empty state when no games match -->
+              <td
+                v-if="filteredGames.length === 0"
+                class="p-8 text-center text-slate-500 text-xs font-mono"
+              >
+                Aucun jeu sélectionné
+              </td>
+
               <!-- Matrix Result Cells for each Game -->
               <td
                 v-for="game in filteredGames"
@@ -244,7 +380,7 @@ function onDataSaved() {
 
             <!-- Empty state -->
             <tr v-if="filteredParticipants.length === 0">
-              <td :colspan="(filteredGames.length || 1) + 1" class="p-12 text-center text-slate-500">
+              <td :colspan="Math.max(filteredGames.length, 1) + 1" class="p-12 text-center text-slate-500">
                 Aucun participant ne correspond aux critères de recherche.
               </td>
             </tr>
