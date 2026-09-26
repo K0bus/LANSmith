@@ -33,8 +33,8 @@ const navItems = [
           <div class="flex items-center gap-3">
             <NuxtLink to="/" class="flex items-center gap-2.5 group">
               <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 p-0.5 shadow-glow-emerald transition-transform group-hover:scale-105">
-                <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                  <Activity class="w-5 h-5 text-brand-400" />
+                <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center p-1.5">
+                  <img src="/favicon.png" alt="LANSmith" class="w-full h-full object-contain" />
                 </div>
               </div>
               <div>
