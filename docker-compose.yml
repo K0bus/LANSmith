@@ -29,7 +29,16 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.lansmith.rule=Host(`lansmith.${DOMAIN}`)"
+      - "traefik.http.routers.lansmith.entrypoints=https"
+      - "traefik.http.routers.lansmith.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.lansmith.middlewares=authentik@file"
+      - "traefik.http.services.lansmith.loadbalancer.server.port=3000"
+      - "net.unraid.docker.webui=https://lansmith.${DOMAIN}"
 
 volumes:
-  lanforge_data:
+  lanforge_data:  
     driver: local

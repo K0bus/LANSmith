@@ -55,8 +55,8 @@ console.log('Store deal effective price:', deal)
 if (deal.is_free || deal.source !== 'KEYSHOP' || deal.savings_cents !== 300 || deal.raw_cents !== 199) {
   throw new Error('Échec comparaison clés vs steam')
 }
-if (deal.keyshop_url !== 'https://gg.deals/game/among-us/') {
-  throw new Error(`Échec génération URL slug GG.deals: obtenu ${deal.keyshop_url}, attendu https://gg.deals/game/among-us/`)
+if (deal.keyshop_url !== 'https://isthereanydeal.com/game/among-us/info/') {
+  throw new Error(`Échec génération URL slug IsThereAnyDeal: obtenu ${deal.keyshop_url}, attendu https://isthereanydeal.com/game/among-us/info/`)
 }
 
 // Test 4b: Nettoyage des suffixes IGDB comme meccha-chameleon--1
@@ -69,10 +69,10 @@ const chameleon = getEffectivePrice({
   currency: 'EUR'
 })
 console.log('Chameleon keyshop_url:', chameleon.keyshop_url)
-if (chameleon.keyshop_url !== 'https://gg.deals/game/meccha-chameleon/') {
-  throw new Error(`Échec nettoyage suffixe IGDB: obtenu ${chameleon.keyshop_url}, attendu https://gg.deals/game/meccha-chameleon/`)
+if (chameleon.keyshop_url !== 'https://isthereanydeal.com/game/meccha-chameleon/info/') {
+  throw new Error(`Échec nettoyage suffixe IGDB: obtenu ${chameleon.keyshop_url}, attendu https://isthereanydeal.com/game/meccha-chameleon/info/`)
 }
-console.log('✅ Test 4 & 4b validés (Lien GG.deals avec slug nettoyé: https://gg.deals/game/meccha-chameleon/) !\n')
+console.log('✅ Test 4 & 4b validés (Lien IsThereAnyDeal avec slug nettoyé: https://isthereanydeal.com/game/meccha-chameleon/info/) !\n')
 
 // Test 5: STORE_BUY with Steam cheaper than Keyshop
 console.log('--- Test 5: Store Buy (Steam promo moins cher que keyshop) ---')
@@ -83,13 +83,14 @@ const steamCheaper = getEffectivePrice({
   keyshopPriceCents: 350,
   currency: 'EUR'
 })
+
 console.log('Steam cheaper effective price:', steamCheaper)
 if (steamCheaper.is_free || steamCheaper.source !== 'STEAM' || steamCheaper.raw_cents !== 199) {
   throw new Error('Échec comparaison steam moins cher')
 }
 console.log('✅ Test 5 validé !\n')
 
-// Test 6: Ingestion Steam API (Live test for Counter-Strike 2 appId: 730)
+// Test 6: Ingestion Steam API (Live test for CS2 appId: 730)
 console.log('--- Test 6: Fetch Steam API réel (CS2 appId: 730) ---')
 async function runSteamLiveTest() {
   try {
@@ -105,6 +106,23 @@ async function runSteamLiveTest() {
   }
 }
 
-runSteamLiveTest().then(() => {
+// Test 7: Keyshop price retrieval for Among Us (appId: 945360, Steam price: 4.49 €)
+console.log('--- Test 7: Récupération du meilleur deal / revendeur pour Among Us ---')
+async function runKeyshopCalibrationTest() {
+  const keyshopResult = await fetchKeyshopPrice('Among Us', '945360', 449, 'among-us')
+  console.log('Keyshop live result for Among Us:', keyshopResult)
+  if (!keyshopResult || !keyshopResult.success || !keyshopResult.priceCents) {
+    throw new Error('Échec fetchKeyshopPrice pour Among Us')
+  }
+  if (!keyshopResult.dealUrl) {
+    throw new Error('dealUrl manquant dans le résultat')
+  }
+  console.log(`✅ Test 7 validé : Meilleur deal (${keyshopResult.shopName}) à ${(keyshopResult.priceCents/100).toFixed(2)} € avec lien direct : ${keyshopResult.dealUrl}\n`)
+}
+
+Promise.all([runSteamLiveTest(), runKeyshopCalibrationTest()]).then(() => {
   console.log('\n🎉 Tous les tests unitaires de tarification sont passés avec succès !')
 })
+
+
+

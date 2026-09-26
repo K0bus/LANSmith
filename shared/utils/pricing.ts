@@ -97,7 +97,7 @@ export function getEffectivePrice(
   const steamUrl = steamAppId ? `https://store.steampowered.com/app/${steamAppId}` : null
   const keyshopUrl =
     customKeyshopUrl ||
-    (gameSlug ? `https://gg.deals/game/${gameSlug}/` : (gameName ? `https://gg.deals/games/?title=${encodeURIComponent(gameName)}` : null))
+    (gameSlug ? `https://isthereanydeal.com/game/${gameSlug}/info/` : (gameName ? `https://isthereanydeal.com/search/?q=${encodeURIComponent(gameName)}` : null))
 
   // 1. FREE TO PLAY
   if (acquisitionType === 'FREE_TO_PLAY') {
