@@ -58,7 +58,21 @@ if (deal.is_free || deal.source !== 'KEYSHOP' || deal.savings_cents !== 300 || d
 if (deal.keyshop_url !== 'https://gg.deals/game/among-us/') {
   throw new Error(`Échec génération URL slug GG.deals: obtenu ${deal.keyshop_url}, attendu https://gg.deals/game/among-us/`)
 }
-console.log('✅ Test 4 validé (Lien GG.deals avec slug: https://gg.deals/game/among-us/) !\n')
+
+// Test 4b: Nettoyage des suffixes IGDB comme meccha-chameleon--1
+const chameleon = getEffectivePrice({
+  name: 'Meccha Chameleon',
+  slug: 'meccha-chameleon--1',
+  acquisitionType: 'STORE_BUY',
+  steamPriceCents: 999,
+  keyshopPriceCents: 499,
+  currency: 'EUR'
+})
+console.log('Chameleon keyshop_url:', chameleon.keyshop_url)
+if (chameleon.keyshop_url !== 'https://gg.deals/game/meccha-chameleon/') {
+  throw new Error(`Échec nettoyage suffixe IGDB: obtenu ${chameleon.keyshop_url}, attendu https://gg.deals/game/meccha-chameleon/`)
+}
+console.log('✅ Test 4 & 4b validés (Lien GG.deals avec slug nettoyé: https://gg.deals/game/meccha-chameleon/) !\n')
 
 // Test 5: STORE_BUY with Steam cheaper than Keyshop
 console.log('--- Test 5: Store Buy (Steam promo moins cher que keyshop) ---')

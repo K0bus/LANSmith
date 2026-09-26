@@ -1,5 +1,6 @@
 import { defineEventHandler, getRouterParam, readBody, createError } from 'h3';
 import { prisma } from '../../utils/prisma';
+import { slugifyGameName } from '../../../shared/utils/pricing';
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id');
@@ -10,9 +11,9 @@ export default defineEventHandler(async (event) => {
   const body = (await readBody(event)) || {};
   const name = body.name ? body.name.trim() : undefined;
   const slug = body.slug
-    ? body.slug.trim()
+    ? slugifyGameName(body.slug)
     : name
-    ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    ? slugifyGameName(name)
     : undefined;
 
   const steamAppId = body.steamAppId !== undefined ? (body.steamAppId ? String(body.steamAppId).trim() : null) : undefined;

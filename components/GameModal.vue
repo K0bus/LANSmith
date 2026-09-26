@@ -26,7 +26,7 @@ import {
   AlertCircle
 } from 'lucide-vue-next'
 import type { IgdbGameSearchResult } from '~/server/utils/igdb'
-import { getEffectivePrice, formatCentsToPrice } from '~/shared/utils/pricing'
+import { getEffectivePrice, formatCentsToPrice, slugifyGameName } from '~/shared/utils/pricing'
 
 interface GameModalProps {
   isOpen: boolean
@@ -406,10 +406,11 @@ async function triggerSearch(q: string) {
 
 function selectIgdbResult(game: IgdbGameSearchResult) {
   selectedIgdbGame.value = game
+  const computedSlug = slugifyGameName(game.name || game.slug)
   form.value = {
     id: '',
     name: game.name,
-    slug: game.slug || game.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    slug: computedSlug,
     igdbId: game.id,
     coverUrl: game.coverUrl || '',
     genres: game.genres || '',
@@ -459,7 +460,7 @@ async function submitForm() {
   try {
     const payload = {
       name: form.value.name.trim(),
-      slug: form.value.slug.trim() || form.value.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      slug: slugifyGameName(form.value.slug || form.value.name),
       igdbId: form.value.igdbId ? Number(form.value.igdbId) : undefined,
       coverUrl: form.value.coverUrl?.trim() || null,
       genres: form.value.genres?.trim() || null,

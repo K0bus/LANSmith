@@ -1,6 +1,7 @@
 import { defineEventHandler, readBody, createError } from 'h3';
 import { prisma } from '../../utils/prisma';
 import { fetchSteamPrice, fetchKeyshopPrice } from '../../utils/pricingService';
+import { slugifyGameName } from '../../../shared/utils/pricing';
 
 export default defineEventHandler(async (event) => {
   const body = (await readBody(event)) || {};
@@ -13,9 +14,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const name = body.name.trim();
-  const slug =
-    (body.slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')) ||
-    'game-' + Date.now();
+  const slug = slugifyGameName(body.slug || name) || 'game-' + Date.now();
 
   const igdbId = body.igdbId ? Number(body.igdbId) : Math.floor(Date.now() / 1000) + Math.floor(Math.random() * 1000);
 

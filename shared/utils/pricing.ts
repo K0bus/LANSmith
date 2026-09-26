@@ -28,16 +28,18 @@ export function formatCentsToPrice(
 }
 
 /**
- * Normalizes a game name into a clean URL slug (e.g. "Among Us" -> "among-us", "Left 4 Dead 2" -> "left-4-dead-2").
+ * Normalizes a game name or slug into a clean URL slug (e.g. "Among Us" -> "among-us", "meccha-chameleon--1" -> "meccha-chameleon").
  */
-export function slugifyGameName(name: string): string {
-  if (!name) return ''
-  return name
+export function slugifyGameName(nameOrSlug: string): string {
+  if (!nameOrSlug) return ''
+  return nameOrSlug
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/--\d+$/, '') // strip IGDB duplicate suffix like --1, --2
     .replace(/['’]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-') // collapse multiple consecutive dashes
     .replace(/^-+|-+$/g, '')
 }
 
@@ -68,7 +70,7 @@ export function getEffectivePrice(
   const steamAppId = (game.steamAppId || game.steam_app_id || null) as string | null
   const customKeyshopUrl = (game.keyshopUrl || game.keyshop_url || null) as string | null
   const gameName = game.name || ''
-  const gameSlug = game.slug || (gameName ? slugifyGameName(gameName) : '')
+  const gameSlug = slugifyGameName(game.slug || gameName)
 
   const lastUpdated = game.priceUpdatedAt || game.price_updated_at
     ? new Date(game.priceUpdatedAt || game.price_updated_at).toISOString()
