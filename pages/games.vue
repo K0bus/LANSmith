@@ -40,6 +40,7 @@ import { getEffectivePrice, formatCentsToPrice } from '~/shared/utils/pricing'
 
 const { data: games, pending, refresh } = await useFetch<any[]>('/api/games')
 const { data: tournaments } = await useFetch<any[]>('/api/tournaments')
+const { data: matrixData, refresh: refreshMatrix } = await useFetch<any>('/api/compatibility/matrix')
 
 const isModalOpen = ref(false)
 const selectedGame = ref<any>(null)
@@ -48,11 +49,11 @@ const acquisitionFilter = ref<'ALL' | 'FREE' | 'PAID'>('ALL')
 const selectedTournamentId = ref<string>('')
 const viewMode = ref<'grid' | 'table'>('grid')
 
-// Sorting state: name, price, minGpu, recGpu, minCpu, recCpu
-const sortBy = ref<'name' | 'price' | 'minGpu' | 'recGpu' | 'minCpu' | 'recCpu'>('name')
+// Sorting state: name, price, compatibility
+const sortBy = ref<'name' | 'price' | 'compatibility'>('name')
 const sortOrder = ref<'asc' | 'desc'>('asc')
 
-function toggleSort(field: 'name' | 'price' | 'minGpu' | 'recGpu' | 'minCpu' | 'recCpu') {
+function toggleSort(field: 'name' | 'price' | 'compatibility') {
   if (sortBy.value === field) {
     sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
   } else {
@@ -123,14 +124,10 @@ const filteredGames = computed(() => {
       const priceA = getEffectivePrice(a).raw_cents ?? (getEffectivePrice(a).is_free ? 0 : 9999999)
       const priceB = getEffectivePrice(b).raw_cents ?? (getEffectivePrice(b).is_free ? 0 : 9999999)
       diff = priceA - priceB
-    } else if (sortBy.value === 'minGpu') {
-      diff = (a.minGpuScore || 0) - (b.minGpuScore || 0)
-    } else if (sortBy.value === 'recGpu') {
-      diff = (a.recGpuScore || 0) - (b.recGpuScore || 0)
-    } else if (sortBy.value === 'minCpu') {
-      diff = (a.minCpuScore || 0) - (b.minCpuScore || 0)
-    } else if (sortBy.value === 'recCpu') {
-      diff = (a.recCpuScore || 0) - (b.recCpuScore || 0)
+    } else if (sortBy.value === 'compatibility') {
+      const readyA = matrixData.value?.gameStats?.[a.id]?.percentReady ?? 0
+      const readyB = matrixData.value?.gameStats?.[b.id]?.percentReady ?? 0
+      diff = readyA - readyB
     }
 
     return sortOrder.value === 'asc' ? diff : -diff
@@ -149,12 +146,8 @@ const summaryStats = computed(() => {
       totalEstimatedCents: 0,
       totalSteamFullCents: 0,
       totalSavingsCents: 0,
-      avgMinGpu: 0,
-      avgRecGpu: 0,
-      avgMinCpu: 0,
-      avgRecCpu: 0,
-      avgMinRamGb: 0,
-      avgRecRamGb: 0
+      avgPercentReady: 0,
+      ready100Count: 0
     }
   }
 
@@ -162,13 +155,8 @@ const summaryStats = computed(() => {
   let paidGamesCount = 0
   let totalEstimatedCents = 0
   let totalSteamFullCents = 0
-
-  let sumMinGpu = 0
-  let sumRecGpu = 0
-  let sumMinCpu = 0
-  let sumRecCpu = 0
-  let sumMinRam = 0
-  let sumRecRam = 0
+  let sumPercentReady = 0
+  let ready100Count = 0
 
   for (const g of list) {
     const eff = getEffectivePrice(g)
@@ -180,12 +168,11 @@ const summaryStats = computed(() => {
       totalSteamFullCents += g.steamPriceCents || eff.raw_cents || 0
     }
 
-    sumMinGpu += g.minGpuScore || 0
-    sumRecGpu += g.recGpuScore || 0
-    sumMinCpu += g.minCpuScore || 0
-    sumRecCpu += g.recCpuScore || 0
-    sumMinRam += g.minRamGb || 8
-    sumRecRam += g.recRamGb || 16
+    const stats = matrixData.value?.gameStats?.[g.id]
+    if (stats) {
+      sumPercentReady += stats.percentReady || 0
+      if (stats.is100PercentReady) ready100Count++
+    }
   }
 
   const totalSavingsCents = Math.max(0, totalSteamFullCents - totalEstimatedCents)
@@ -197,12 +184,8 @@ const summaryStats = computed(() => {
     totalEstimatedCents,
     totalSteamFullCents,
     totalSavingsCents,
-    avgMinGpu: Math.round(sumMinGpu / totalGames),
-    avgRecGpu: Math.round(sumRecGpu / totalGames),
-    avgMinCpu: Math.round(sumMinCpu / totalGames),
-    avgRecCpu: Math.round(sumRecCpu / totalGames),
-    avgMinRamGb: Number((sumMinRam / totalGames).toFixed(1)),
-    avgRecRamGb: Number((sumRecRam / totalGames).toFixed(1))
+    avgPercentReady: Math.round(sumPercentReady / totalGames),
+    ready100Count
   }
 })
 
@@ -221,7 +204,7 @@ async function deleteGame(id: string, name: string) {
 
   try {
     await $fetch(`/api/games/${id}`, { method: 'DELETE' })
-    refresh()
+    await Promise.all([refresh(), refreshMatrix()])
   } catch (err) {
     alert('Erreur lors de la suppression.')
   }
@@ -234,7 +217,7 @@ async function refreshSingleGamePrices(gameId: string) {
       method: 'POST',
       body: { force: true }
     })
-    await refresh()
+    await Promise.all([refresh(), refreshMatrix()])
   } catch (err) {
     console.error('Error refreshing prices:', err)
   } finally {
@@ -261,10 +244,10 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
       <div>
         <h1 class="text-2xl font-black text-white flex items-center gap-2.5">
           <Gamepad2 class="w-6 h-6 text-cyan-400" />
-          <span>Catalogue de Jeux, Tarification & Exigences</span>
+          <span>Catalogue de Jeux & Tarification</span>
         </h1>
         <p class="text-xs text-slate-400 mt-1">
-          Suivi des prix dynamiques (Steam & Marché gris), acquisition groupe/partage et profils de benchmark PassMark
+          Suivi des prix dynamiques (Steam & Marché gris), acquisition groupe/partage et compatibilité du parc
         </p>
       </div>
 
@@ -321,44 +304,44 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
         <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl group-hover:bg-emerald-500/15 transition-all pointer-events-none" />
       </div>
 
-      <!-- 3. Moyenne Score GPU -->
+      <!-- 3. Compatibilité Moyenne Parc -->
       <div class="cyber-card p-4 bg-slate-950/80 border-slate-800 flex items-center gap-4 relative overflow-hidden group">
         <div class="p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 shrink-0">
-          <Monitor class="w-6 h-6" />
+          <Activity class="w-6 h-6" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider flex items-center justify-between">
-            <span>Moyenne GPU</span>
-            <span class="text-[9px] text-purple-400">G3D Mark</span>
+            <span>Compatibilité Parc</span>
+            <span class="text-[9px] text-purple-400">Moyenne</span>
           </div>
           <div class="text-2xl font-black text-purple-300 font-mono mt-0.5">
-            {{ summaryStats.avgMinGpu }} <span class="text-xs text-slate-400 font-normal">pts (Min)</span>
+            {{ summaryStats.avgPercentReady }}% <span class="text-xs text-slate-400 font-normal">prêts</span>
           </div>
           <div class="text-[10px] font-mono text-purple-300/80 mt-0.5 truncate">
-            Rec : <strong>{{ summaryStats.avgRecGpu }} pts</strong>
+            Sur l'ensemble des joueurs inscrits
           </div>
         </div>
         <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-purple-500/5 rounded-full blur-xl group-hover:bg-purple-500/15 transition-all pointer-events-none" />
       </div>
 
-      <!-- 4. Moyenne Score CPU & RAM -->
+      <!-- 4. Jeux 100% Prêts -->
       <div class="cyber-card p-4 bg-slate-950/80 border-slate-800 flex items-center gap-4 relative overflow-hidden group">
-        <div class="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 shrink-0">
-          <Cpu class="w-6 h-6" />
+        <div class="p-3 rounded-xl bg-brand-500/10 border border-brand-500/30 text-brand-400 shrink-0">
+          <CheckCircle2 class="w-6 h-6" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider flex items-center justify-between">
-            <span>Moyenne CPU & RAM</span>
-            <span class="text-[9px] text-blue-400">PassMark</span>
+            <span>Jeux 100% Prêts</span>
+            <span class="text-[9px] text-brand-400">Zéro Upgrade</span>
           </div>
-          <div class="text-2xl font-black text-cyan-300 font-mono mt-0.5">
-            {{ summaryStats.avgMinCpu }} <span class="text-xs text-slate-400 font-normal">pts (Min)</span>
+          <div class="text-2xl font-black text-brand-300 font-mono mt-0.5">
+            {{ summaryStats.ready100Count }} <span class="text-xs text-slate-400 font-normal">/ {{ summaryStats.totalGames }} jeux</span>
           </div>
-          <div class="text-[10px] font-mono text-blue-300/80 mt-0.5 truncate">
-            Rec : <strong>{{ summaryStats.avgRecCpu }} pts</strong> • RAM : <strong>{{ summaryStats.avgMinRamGb }} Go</strong>
+          <div class="text-[10px] font-mono text-brand-300/80 mt-0.5 truncate">
+            Compatibles avec toutes les configs
           </div>
         </div>
-        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-blue-500/5 rounded-full blur-xl group-hover:bg-blue-500/15 transition-all pointer-events-none" />
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-brand-500/5 rounded-full blur-xl group-hover:bg-brand-500/15 transition-all pointer-events-none" />
       </div>
     </div>
 
@@ -431,7 +414,7 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
             </button>
           </div>
 
-          <!-- 3. Sort Selector (Nom, Prix, Specs) -->
+          <!-- 3. Sort Selector (Nom, Prix, Compatibilité) -->
           <div class="relative flex items-center">
             <div class="relative">
               <ArrowUpDown class="w-3.5 h-3.5 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -442,18 +425,14 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
                   sortBy = field
                   sortOrder = order
                 }"
-                class="pl-8 pr-8 py-2 rounded-xl text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer transition-all shadow-sm max-w-[210px] truncate font-mono"
+                class="pl-8 pr-8 py-2 rounded-xl text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer transition-all shadow-sm max-w-[220px] truncate font-mono"
               >
                 <option value="name_asc">Tri : Nom (A → Z)</option>
                 <option value="name_desc">Tri : Nom (Z → A)</option>
                 <option value="price_asc">Tri : Prix (Moins cher)</option>
                 <option value="price_desc">Tri : Prix (Plus cher)</option>
-                <option value="minGpu_asc">Tri : GPU Min (Plus léger)</option>
-                <option value="minGpu_desc">Tri : GPU Min (Plus lourd)</option>
-                <option value="recGpu_asc">Tri : GPU Rec (Plus léger)</option>
-                <option value="recGpu_desc">Tri : GPU Rec (Plus lourd)</option>
-                <option value="minCpu_asc">Tri : CPU Min (Plus léger)</option>
-                <option value="minCpu_desc">Tri : CPU Min (Plus lourd)</option>
+                <option value="compatibility_desc">Tri : Compatibilité (Plus prêt)</option>
+                <option value="compatibility_asc">Tri : Compatibilité (Moins prêt)</option>
               </select>
               <ChevronDown class="w-3.5 h-3.5 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
@@ -501,7 +480,7 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
         </div>
         <button
           @click="selectedTournamentId = ''"
-          class="text-[11px] underline text-amber-400 hover:text-amber-200 cursor-pointer"
+          class="text-amber-400 hover:text-amber-200 underline text-[11px] cursor-pointer"
         >
           Afficher tous les jeux
         </button>
@@ -509,198 +488,145 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
     </div>
 
     <!-- VIEW 1: GRID / CARDS VIEW -->
-    <div v-if="viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div
+      v-if="viewMode === 'grid'"
+      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+    >
       <div
         v-for="game in filteredGames"
         :key="game.id"
-        class="cyber-card overflow-hidden border-slate-800 hover:border-slate-700 flex flex-col justify-between group transition-all"
+        class="cyber-card p-0 overflow-hidden flex flex-col justify-between group border-slate-800/80 hover:border-cyan-500/50 transition-all duration-300"
       >
         <div>
-          <!-- Banner & Cover header -->
-          <div class="relative h-48 bg-slate-950 overflow-hidden">
+          <!-- Game Image Banner + Overlay Badges -->
+          <div class="relative h-48 w-full overflow-hidden bg-slate-950">
             <img
-              :src="game.coverUrl || 'https://placehold.co/400x200/0f172a/38bdf8?text=Jeu+LAN'"
-              class="w-full h-full object-cover opacity-60 group-hover:opacity-80 group-hover:scale-105 transition-all duration-300"
+              :src="game.coverUrl || 'https://placehold.co/600x400/0f172a/38bdf8?text=Jeu'"
+              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               alt="cover"
             />
-            <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent" />
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
 
-            <!-- Price Tag Badge Top-Left -->
-            <div class="absolute top-3 left-3 flex flex-col items-start gap-1">
-              <!-- Free to play -->
-              <span
-                v-if="game.acquisitionType === 'FREE_TO_PLAY'"
-                class="px-2.5 py-1 rounded-lg bg-emerald-950/90 backdrop-blur-md border border-emerald-500/80 text-emerald-300 text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-lg"
-              >
-                <Sparkles class="w-3.5 h-3.5 text-emerald-400" />
-                <span>Gratuit (Free-to-Play)</span>
-              </span>
-
-              <!-- Friend Share -->
-              <span
-                v-else-if="game.acquisitionType === 'FRIEND_SHARE'"
-                class="px-2.5 py-1 rounded-lg bg-purple-950/90 backdrop-blur-md border border-purple-500/80 text-purple-200 text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-lg"
-              >
-                <Users class="w-3.5 h-3.5 text-purple-400" />
-                <span>Gratuit (Partage entre amis)</span>
-              </span>
-
-              <!-- Store Buy - Lowest Price Tag -->
-              <a
-                v-else-if="getEffectivePrice(game).source === 'KEYSHOP' && getEffectivePrice(game).keyshop_url"
-                :href="getEffectivePrice(game).keyshop_url!"
-                target="_blank"
-                class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-900 backdrop-blur-md border border-emerald-500/80 hover:border-emerald-400 text-white text-xs font-mono font-bold flex items-center gap-1.5 shadow-lg group/tag transition-all"
-                title="Acheter au meilleur prix (Store revendeur)"
-              >
-                <Tag class="w-3.5 h-3.5 text-emerald-400" />
-                <span class="text-emerald-300 font-extrabold">{{ getEffectivePrice(game).display_price }}</span>
-                <span class="text-[10px] text-slate-300 font-normal">({{ getEffectivePrice(game).source_label }})</span>
-                <ExternalLink class="w-3 h-3 text-slate-400 group-hover/tag:text-emerald-300 ml-0.5" />
-              </a>
-
-              <a
-                v-else-if="getEffectivePrice(game).source === 'STEAM' && getEffectivePrice(game).steam_url"
-                :href="getEffectivePrice(game).steam_url!"
-                target="_blank"
-                class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-900 backdrop-blur-md border border-cyan-500/80 hover:border-cyan-400 text-white text-xs font-mono font-bold flex items-center gap-1.5 shadow-lg group/tag transition-all"
-                title="Acheter sur le store officiel Steam"
-              >
-                <Tag class="w-3.5 h-3.5 text-cyan-400" />
-                <span class="text-cyan-300 font-extrabold">{{ getEffectivePrice(game).display_price }}</span>
-                <span class="text-[10px] text-slate-300 font-normal">({{ getEffectivePrice(game).source_label }})</span>
-                <ExternalLink class="w-3 h-3 text-slate-400 group-hover/tag:text-cyan-300 ml-0.5" />
-              </a>
-
-              <div
-                v-else
-                class="px-2.5 py-1 rounded-lg bg-slate-900/90 backdrop-blur-md border border-cyan-500/60 text-white text-xs font-mono font-bold flex items-center gap-1.5 shadow-lg"
-              >
-                <Tag class="w-3.5 h-3.5 text-cyan-400" />
-                <span class="text-cyan-300 font-extrabold">{{ getEffectivePrice(game).display_price }}</span>
-                <span class="text-[10px] text-slate-300 font-normal">({{ getEffectivePrice(game).source_label }})</span>
+            <!-- Acquisition Type Badge (Top-Left) -->
+            <div class="absolute top-3 left-3 flex flex-col gap-1.5">
+              <div v-if="game.acquisitionType === 'FREE_TO_PLAY'">
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-700/80 shadow-lg backdrop-blur-sm">
+                  <Sparkles class="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Free-to-Play</span>
+                </span>
+              </div>
+              <div v-else-if="game.acquisitionType === 'FRIEND_SHARE'">
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-purple-950/90 text-purple-300 border border-purple-700/80 shadow-lg backdrop-blur-sm">
+                  <Users class="w-3.5 h-3.5 text-purple-400" />
+                  <span>Partage LAN (1 Achat)</span>
+                </span>
+              </div>
+              <div v-else>
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-950/90 text-blue-300 border border-blue-700/80 shadow-lg backdrop-blur-sm">
+                  <Store class="w-3.5 h-3.5 text-blue-400" />
+                  <span>Achat Requis</span>
+                </span>
               </div>
             </div>
 
-            <!-- Action buttons Top-Right -->
-            <div class="absolute top-3 right-3 flex items-center gap-1">
+            <!-- Action buttons (Top-Right) -->
+            <div class="absolute top-3 right-3 flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
               <button
                 @click="refreshSingleGamePrices(game.id)"
                 :disabled="refreshingPrices[game.id]"
-                class="p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-md text-slate-300 hover:text-cyan-400 hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
-                title="Actualiser les tarifs Steam & Clés"
+                class="p-1.5 rounded-lg bg-slate-950/80 hover:bg-slate-900 text-slate-300 hover:text-cyan-300 border border-slate-700 backdrop-blur-sm transition-all cursor-pointer disabled:opacity-50"
+                title="Actualiser les prix"
               >
                 <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': refreshingPrices[game.id] }" />
               </button>
               <button
                 @click="openEditModal(game)"
-                class="p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-md text-slate-300 hover:text-cyan-400 hover:bg-slate-800 transition-all cursor-pointer"
+                class="p-1.5 rounded-lg bg-slate-950/80 hover:bg-slate-900 text-slate-300 hover:text-cyan-300 border border-slate-700 backdrop-blur-sm transition-all cursor-pointer"
                 title="Modifier"
               >
                 <Edit2 class="w-3.5 h-3.5" />
               </button>
               <button
                 @click="deleteGame(game.id, game.name)"
-                class="p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-md text-slate-300 hover:text-rose-400 hover:bg-slate-800 transition-all cursor-pointer"
+                class="p-1.5 rounded-lg bg-slate-950/80 hover:bg-slate-900 text-slate-300 hover:text-rose-400 border border-slate-700 backdrop-blur-sm transition-all cursor-pointer"
                 title="Supprimer"
               >
                 <Trash2 class="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <!-- Title & Metadata Bottom -->
-            <div class="absolute bottom-3 left-4 right-4">
-              <h3 class="font-bold text-lg text-white leading-tight drop-shadow truncate">
+            <!-- Title & Genres (Bottom of Image) -->
+            <div class="absolute bottom-3 left-3 right-3">
+              <h3 class="font-black text-lg text-white leading-tight truncate drop-shadow-md">
                 {{ game.name }}
               </h3>
-              <div class="flex items-center gap-2 mt-0.5">
-                <span v-if="game.genres" class="text-[10px] text-cyan-400/90 font-mono truncate">
+              <div class="flex items-center gap-2 mt-0.5 text-xs text-slate-300 font-mono">
+                <span v-if="game.steamAppId" class="text-[10px] text-blue-400 bg-blue-950/60 px-1.5 py-0.2 rounded border border-blue-800">
+                  AppID: {{ game.steamAppId }}
+                </span>
+                <span v-if="game.genres" class="text-[11px] text-slate-300 truncate">
                   {{ game.genres }}
                 </span>
-                <a
-                  v-if="game.steamAppId"
-                  :href="`https://store.steampowered.com/app/${game.steamAppId}`"
-                  target="_blank"
-                  class="text-[10px] text-blue-300 hover:text-blue-200 font-mono hover:underline inline-flex items-center gap-0.5"
-                  title="Ouvrir la fiche Steam"
-                >
-                  <span>Steam #{{ game.steamAppId }}</span>
-                  <ExternalLink class="w-2.5 h-2.5" />
-                </a>
               </div>
             </div>
           </div>
 
-          <!-- Description & Content Section -->
+          <!-- Card Content Body -->
           <div class="p-5 space-y-4">
-            <p class="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-              {{ game.summary || 'Aucun résumé disponible pour ce jeu.' }}
+            <!-- Game Summary -->
+            <p v-if="game.summary" class="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+              {{ game.summary }}
             </p>
 
-            <!-- Pricing Comparison / Friend Share Box -->
-            <div class="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
-              <div class="flex items-center justify-between text-[11px] font-mono">
-                <span class="text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                  <Coins class="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Acquisition & Tarifs :</span>
-                </span>
-                <span class="text-[10px] text-slate-500">
-                  Synchro : {{ formatRelativeTime(game.priceUpdatedAt) }}
-                </span>
+            <!-- 1. SECTION TARIFICATION & ACQUISITION -->
+            <div class="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-3">
+              <!-- En-tête : Prix effectif du participant -->
+              <div class="flex items-center justify-between">
+                <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+                  Tarif Joueur :
+                </div>
+                <div class="text-right">
+                  <div
+                    class="text-base font-black font-mono tracking-tight"
+                    :class="
+                      getEffectivePrice(game).is_free
+                        ? 'text-emerald-400'
+                        : 'text-cyan-300'
+                    "
+                  >
+                    {{ getEffectivePrice(game).display_price }}
+                  </div>
+                  <div class="text-[10px] font-mono text-slate-500">
+                    {{ getEffectivePrice(game).source_label }}
+                  </div>
+                </div>
               </div>
 
-              <!-- Cas 1: Partage entre amis avec lien -->
-              <div v-if="game.acquisitionType === 'FRIEND_SHARE'" class="space-y-2">
-                <div class="flex items-center justify-between p-2 rounded-lg bg-purple-950/30 border border-purple-800/60 text-xs">
-                  <span class="text-purple-300 font-bold flex items-center gap-1.5">
-                    <Users class="w-3.5 h-3.5 text-purple-400" />
-                    <span>Partage LAN / Réseau</span>
-                  </span>
-                  <span class="text-emerald-400 font-mono font-bold">0,00 €</span>
-                </div>
-                
+              <!-- Si Friend Share : lien de téléchargement -->
+              <div
+                v-if="game.acquisitionType === 'FRIEND_SHARE' && game.friendDownloadUrl"
+                class="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs font-mono"
+              >
+                <span class="text-purple-300 text-[11px]">Install Partagé :</span>
                 <a
-                  v-if="game.friendDownloadUrl"
                   :href="game.friendDownloadUrl.startsWith('http') ? game.friendDownloadUrl : undefined"
                   :target="game.friendDownloadUrl.startsWith('http') ? '_blank' : undefined"
-                  class="flex items-center justify-between p-2 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/50 text-emerald-300 text-xs font-mono font-bold transition-all"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 hover:text-purple-200 border border-purple-800/80 text-[11px] font-bold transition-all truncate max-w-[180px]"
                   :title="game.friendDownloadUrl"
                 >
-                  <span class="flex items-center gap-1.5 truncate mr-2">
-                    <Download class="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span class="truncate">{{ game.friendDownloadUrl }}</span>
-                  </span>
-                  <ExternalLink class="w-3.5 h-3.5 shrink-0" />
+                  <Download class="w-3 h-3 shrink-0" />
+                  <span class="truncate">{{ game.friendDownloadUrl.startsWith('http') ? 'Télécharger' : game.friendDownloadUrl }}</span>
+                  <ExternalLink v-if="game.friendDownloadUrl.startsWith('http')" class="w-2.5 h-2.5 shrink-0 opacity-70" />
                 </a>
               </div>
 
-              <!-- Cas 2: Free to Play -->
-              <div v-else-if="game.acquisitionType === 'FREE_TO_PLAY'" class="space-y-2">
-                <div class="flex items-center justify-between p-2 rounded-lg bg-emerald-950/30 border border-emerald-800/60 text-xs">
-                  <span class="text-emerald-300 font-bold flex items-center gap-1.5">
-                    <Sparkles class="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Free-to-Play officiel</span>
-                  </span>
-                  <span class="text-emerald-400 font-mono font-bold">0,00 €</span>
-                </div>
-                <a
-                  v-if="getEffectivePrice(game).steam_url"
-                  :href="getEffectivePrice(game).steam_url!"
-                  target="_blank"
-                  class="flex items-center justify-between p-1.5 px-2.5 rounded-lg bg-blue-950/30 hover:bg-blue-900/40 border border-blue-800/50 text-blue-300 text-xs font-mono transition-all"
-                >
-                  <span class="flex items-center gap-1.5">
-                    <Store class="w-3 h-3 text-blue-400" />
-                    <span>Télécharger / Installer sur Steam</span>
-                  </span>
-                  <ExternalLink class="w-3 h-3" />
-                </a>
-              </div>
-
-              <!-- Cas 3: Store / Clés avec Comparateur Steam vs Marché Gris -->
-              <div v-else class="space-y-1.5">
-                <div class="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <!-- Steam Official Store Link -->
+              <!-- Si Store Buy : Comparatif Steam vs Clé revendeur -->
+              <div
+                v-else-if="game.acquisitionType === 'STORE_BUY'"
+                class="pt-2 border-t border-slate-800/60 space-y-2 font-mono"
+              >
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                  <!-- Steam Official Price Box -->
                   <a
                     v-if="getEffectivePrice(game).steam_url"
                     :href="getEffectivePrice(game).steam_url!"
@@ -719,8 +645,8 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
                         <span>Steam</span>
                       </span>
                       <div class="flex items-center gap-1">
-                        <span v-if="getEffectivePrice(game).source === 'STEAM'" class="text-[9px] text-cyan-400 uppercase font-bold">Choisi</span>
-                        <ExternalLink class="w-2.5 h-2.5 text-slate-500 group-hover/steam:text-blue-300" />
+                        <span v-if="getEffectivePrice(game).source === 'STEAM'" class="text-[9px] text-cyan-400 uppercase font-bold">Meilleur</span>
+                        <ExternalLink class="w-2.5 h-2.5 text-slate-500 group-hover/steam:text-cyan-300" />
                       </div>
                     </div>
                     <div class="text-sm font-bold text-white mt-1">
@@ -742,7 +668,7 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
                     </div>
                   </div>
 
-                  <!-- Keyshop / Gray Market Deal Link -->
+                  <!-- Keyshop / GG Deals Best Price Box -->
                   <a
                     v-if="getEffectivePrice(game).keyshop_url"
                     :href="getEffectivePrice(game).keyshop_url!"
@@ -798,63 +724,47 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
               </div>
             </div>
 
-            <!-- Minimum Specs Box -->
+            <!-- Compatibility Status Box -->
             <div class="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-2.5">
-              <div class="text-[11px] font-mono text-amber-400 font-bold uppercase tracking-wider flex items-center justify-between">
-                <span>Spécifications Minimales :</span>
-                <span class="text-[10px] text-slate-500 font-normal">Plancher 720p/1080p</span>
+              <div class="text-[11px] font-mono text-slate-300 font-bold uppercase tracking-wider flex items-center justify-between">
+                <span class="flex items-center gap-1.5">
+                  <Activity class="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Compatibilité Parc :</span>
+                </span>
+                <span
+                  class="inline-block px-2 py-0.5 rounded text-[11px] font-mono font-bold"
+                  :class="
+                    matrixData?.gameStats?.[game.id]?.is100PercentReady
+                      ? 'bg-brand-500/20 text-brand-300 border border-brand-500/40'
+                      : (matrixData?.gameStats?.[game.id]?.percentReady ?? 0) > 0
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                  "
+                >
+                  {{ matrixData?.gameStats?.[game.id]?.percentReady ?? 0 }}% prêts
+                </span>
               </div>
 
-              <div class="grid grid-cols-2 gap-2 text-xs font-mono">
-                <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span class="text-slate-400 text-[10px]">Min GPU</span>
-                  <span class="text-purple-300 font-bold">{{ game.minGpuScore }} pts</span>
-                </div>
-
-                <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span class="text-slate-400 text-[10px]">Min CPU</span>
-                  <span class="text-cyan-300 font-bold">{{ game.minCpuScore }} pts</span>
-                </div>
-
-                <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span class="text-slate-400 text-[10px]">Min RAM</span>
-                  <span class="text-emerald-400 font-bold">{{ game.minRamGb }} Go</span>
-                </div>
-
-                <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span class="text-slate-400 text-[10px]">Min VRAM</span>
-                  <span class="text-purple-400 font-bold">{{ game.minVramGb }} Go</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Recommended Specs Box -->
-            <div class="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-2.5">
-              <div class="text-[11px] font-mono text-emerald-400 font-bold uppercase tracking-wider flex items-center justify-between">
-                <span>Spécifications Recommandées :</span>
-                <span class="text-[10px] text-slate-500 font-normal">Confort 1080p/1440p</span>
+              <!-- Progress Bar -->
+              <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
+                <div
+                  class="h-full rounded-full transition-all duration-500"
+                  :class="
+                    matrixData?.gameStats?.[game.id]?.is100PercentReady
+                      ? 'bg-gradient-to-r from-cyan-500 to-brand-500'
+                      : (matrixData?.gameStats?.[game.id]?.percentReady ?? 0) > 0
+                        ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                        : 'bg-rose-500'
+                  "
+                  :style="{ width: `${matrixData?.gameStats?.[game.id]?.percentReady ?? 0}%` }"
+                />
               </div>
 
-              <div class="grid grid-cols-2 gap-2 text-xs font-mono">
-                <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span class="text-slate-400 text-[10px]">Rec GPU</span>
-                  <span class="text-purple-300 font-bold">{{ game.recGpuScore }} pts</span>
-                </div>
-
-                <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span class="text-slate-400 text-[10px]">Rec CPU</span>
-                  <span class="text-cyan-300 font-bold">{{ game.recCpuScore }} pts</span>
-                </div>
-
-                <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span class="text-slate-400 text-[10px]">Rec RAM</span>
-                  <span class="text-emerald-400 font-bold">{{ game.recRamGb }} Go</span>
-                </div>
-
-                <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800">
-                  <span class="text-slate-400 text-[10px]">Rec VRAM</span>
-                  <span class="text-purple-400 font-bold">{{ game.recVramGb }} Go</span>
-                </div>
+              <div class="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                <span>Configurations compatibles</span>
+                <span class="text-white font-semibold">
+                  {{ matrixData?.gameStats?.[game.id]?.compatibleCount ?? 0 }} / {{ matrixData?.gameStats?.[game.id]?.totalParticipants ?? 0 }} joueurs
+                </span>
               </div>
             </div>
           </div>
@@ -911,35 +821,21 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
               <!-- 4. Steam vs Clé -->
               <th class="py-3.5 px-4">Steam vs Clé</th>
 
-              <!-- 5. Specs Min -->
+              <!-- 5. Compatibilité Parc (% OK) -->
               <th
-                @click="toggleSort('minGpu')"
+                @click="toggleSort('compatibility')"
                 class="py-3.5 px-4 cursor-pointer hover:text-white transition-colors group/th"
-                title="Cliquer pour trier par score GPU/CPU minimal"
+                title="Cliquer pour trier par compatibilité"
               >
                 <div class="flex items-center gap-1.5">
-                  <span :class="{ 'text-cyan-400 font-bold': sortBy === 'minGpu' || sortBy === 'minCpu' }">Specs Min (GPU / CPU / RAM)</span>
-                  <ArrowUp v-if="sortBy === 'minGpu' && sortOrder === 'asc'" class="w-3 h-3 text-cyan-400 shrink-0" />
-                  <ArrowDown v-else-if="sortBy === 'minGpu' && sortOrder === 'desc'" class="w-3 h-3 text-cyan-400 shrink-0" />
+                  <span :class="{ 'text-cyan-400 font-bold': sortBy === 'compatibility' }">Compatibilité Parc (% OK)</span>
+                  <ArrowUp v-if="sortBy === 'compatibility' && sortOrder === 'asc'" class="w-3 h-3 text-cyan-400 shrink-0" />
+                  <ArrowDown v-else-if="sortBy === 'compatibility' && sortOrder === 'desc'" class="w-3 h-3 text-cyan-400 shrink-0" />
                   <ArrowUpDown v-else class="w-3 h-3 text-slate-600 group-hover/th:text-slate-400 shrink-0" />
                 </div>
               </th>
 
-              <!-- 6. Specs Rec -->
-              <th
-                @click="toggleSort('recGpu')"
-                class="py-3.5 px-4 cursor-pointer hover:text-white transition-colors group/th"
-                title="Cliquer pour trier par score GPU/CPU recommandé"
-              >
-                <div class="flex items-center gap-1.5">
-                  <span :class="{ 'text-cyan-400 font-bold': sortBy === 'recGpu' || sortBy === 'recCpu' }">Specs Rec (GPU / CPU / RAM)</span>
-                  <ArrowUp v-if="sortBy === 'recGpu' && sortOrder === 'asc'" class="w-3 h-3 text-cyan-400 shrink-0" />
-                  <ArrowDown v-else-if="sortBy === 'recGpu' && sortOrder === 'desc'" class="w-3 h-3 text-cyan-400 shrink-0" />
-                  <ArrowUpDown v-else class="w-3 h-3 text-slate-600 group-hover/th:text-slate-400 shrink-0" />
-                </div>
-              </th>
-
-              <!-- 7. Actions -->
+              <!-- 6. Actions -->
               <th class="py-3.5 px-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -977,13 +873,13 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
               <td class="py-3 px-4 whitespace-nowrap">
                 <div v-if="game.acquisitionType === 'FREE_TO_PLAY'">
                   <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800">
-                    <Sparkles class="w-3 h-3 text-emerald-400" />
+                    <Sparkles class="w-3.5 h-3.5 text-emerald-400" />
                     <span>Free-to-Play</span>
                   </span>
                 </div>
                 <div v-else-if="game.acquisitionType === 'FRIEND_SHARE'" class="space-y-1">
                   <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-purple-950/80 text-purple-300 border border-purple-800">
-                    <Users class="w-3 h-3 text-purple-400" />
+                    <Users class="w-3.5 h-3.5 text-purple-400" />
                     <span>Partage LAN</span>
                   </span>
                   <div v-if="game.friendDownloadUrl">
@@ -1071,25 +967,28 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
                 </div>
               </td>
 
-              <!-- 5. Specs Min -->
+              <!-- 5. Compatibilité Parc (% OK) -->
               <td class="py-3 px-4 whitespace-nowrap">
-                <div class="text-[11px] space-y-0.5">
-                  <div class="text-purple-300 font-bold">GPU: {{ game.minGpuScore }} pts</div>
-                  <div class="text-cyan-300">CPU: {{ game.minCpuScore }} pts</div>
-                  <div class="text-emerald-400">RAM: {{ game.minRamGb }} Go</div>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="inline-block px-2 py-0.5 rounded text-[11px] font-mono font-bold"
+                    :class="
+                      matrixData?.gameStats?.[game.id]?.is100PercentReady
+                        ? 'bg-brand-500/20 text-brand-300 border border-brand-500/40'
+                        : (matrixData?.gameStats?.[game.id]?.percentReady ?? 0) > 0
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                    "
+                  >
+                    {{ matrixData?.gameStats?.[game.id]?.percentReady ?? 0 }}% prêts
+                  </span>
+                  <span class="text-[10px] text-slate-400 font-mono">
+                    ({{ matrixData?.gameStats?.[game.id]?.compatibleCount ?? 0 }}/{{ matrixData?.gameStats?.[game.id]?.totalParticipants ?? 0 }} joueurs)
+                  </span>
                 </div>
               </td>
 
-              <!-- 6. Specs Rec -->
-              <td class="py-3 px-4 whitespace-nowrap">
-                <div class="text-[11px] space-y-0.5">
-                  <div class="text-purple-300 font-bold">GPU: {{ game.recGpuScore }} pts</div>
-                  <div class="text-cyan-300">CPU: {{ game.recCpuScore }} pts</div>
-                  <div class="text-emerald-400">RAM: {{ game.recRamGb }} Go</div>
-                </div>
-              </td>
-
-              <!-- 7. Actions -->
+              <!-- 6. Actions -->
               <td class="py-3 px-4 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-1.5">
                   <button
@@ -1145,7 +1044,7 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
       :isOpen="isModalOpen"
       :gameToEdit="selectedGame"
       @close="isModalOpen = false"
-      @saved="refresh"
+      @saved="() => { refresh(); refreshMatrix() }"
     />
   </div>
 </template>

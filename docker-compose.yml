@@ -39,10 +39,20 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
+      # Routeur standard sécurisé par Authentik
       - "traefik.http.routers.lansmith.rule=Host(`lansmith.${DOMAIN}`)"
       - "traefik.http.routers.lansmith.entrypoints=https"
       - "traefik.http.routers.lansmith.tls.certresolver=letsencrypt"
       - "traefik.http.routers.lansmith.middlewares=authentik@file"
+      - "traefik.http.routers.lansmith.service=lansmith"
+      - "traefik.http.routers.lansmith.priority=1"
+      # Routeur public (Bypass Authentik pour la vue publique du tournoi, son API et les assets)
+      - "traefik.http.routers.lansmith-public.rule=Host(`lansmith.${DOMAIN}`) && (PathPrefix(`/_nuxt`) || PathRegexp(`^/tournaments/[^/]+/public`) || PathRegexp(`^/api/tournaments/[^/]+/leaderboard`))"
+      - "traefik.http.routers.lansmith-public.entrypoints=https"
+      - "traefik.http.routers.lansmith-public.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.lansmith-public.service=lansmith"
+      - "traefik.http.routers.lansmith-public.priority=100"
+      # Service
       - "traefik.http.services.lansmith.loadbalancer.server.port=3000"
       - "folder.view3=03-Applications"
       - "net.unraid.docker.icon=https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/lan-party.png"
