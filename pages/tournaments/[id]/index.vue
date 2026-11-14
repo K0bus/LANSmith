@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Trophy, Medal, Award, ArrowLeft, Plus, RefreshCw, Gamepad2, Users, Flame, Star, CheckCircle2, Swords, ListOrdered, Layers, Share2, Copy, Check, ExternalLink, Radio, X, Shuffle } from 'lucide-vue-next'
+import { Trophy, Medal, Award, ArrowLeft, Plus, RefreshCw, Gamepad2, Users, Flame, Star, CheckCircle2, Swords, ListOrdered, Layers, Share2, Copy, Check, ExternalLink, Radio, X, Shuffle, Tv, Eye } from 'lucide-vue-next'
 import ScoreEntryModal from '~/components/ScoreEntryModal.vue'
 import RoundRobinModal from '~/components/RoundRobinModal.vue'
 
@@ -19,20 +19,31 @@ const searchQuery = ref('')
 
 // Share Modal
 const isShareModalOpen = ref(false)
-const shareCopied = ref(false)
+const shareCopiedInteractive = ref(false)
+const shareCopiedTv = ref(false)
 
-const shareUrl = computed(() => {
+const shareInteractiveUrl = computed(() => {
   if (!process.client) return ''
   return `${window.location.origin}/tournaments/${tournamentId.value}/public`
 })
 
-function copyShareUrl() {
-  if (!process.client || !shareUrl.value) return
-  navigator.clipboard.writeText(shareUrl.value)
-  shareCopied.value = true
-  setTimeout(() => {
-    shareCopied.value = false
-  }, 2500)
+const shareTvUrl = computed(() => {
+  if (!process.client) return ''
+  return `${window.location.origin}/tournaments/${tournamentId.value}/public?mode=tv`
+})
+
+function copyShareUrl(type: 'interactive' | 'tv' = 'interactive') {
+  if (!process.client) return
+  const url = type === 'tv' ? shareTvUrl.value : shareInteractiveUrl.value
+  if (!url) return
+  navigator.clipboard.writeText(url)
+  if (type === 'tv') {
+    shareCopiedTv.value = true
+    setTimeout(() => { shareCopiedTv.value = false }, 2500)
+  } else {
+    shareCopiedInteractive.value = true
+    setTimeout(() => { shareCopiedInteractive.value = false }, 2500)
+  }
 }
 
 const leaderboard = computed(() => {
@@ -461,58 +472,95 @@ function onScoresSaved() {
           <div class="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs text-slate-300">
             <div class="flex items-center gap-2 text-cyan-400 font-bold font-mono">
               <Radio class="w-3.5 h-3.5 animate-pulse" />
-              <span>Vue Spectateur & Diffusion (Lecture Seule)</span>
+              <span>Accès Public Spectateurs & Diffusion (Lecture Seule)</span>
             </div>
             <p class="text-slate-400 text-[11px] leading-relaxed">
-              Ce lien donne un accès direct en lecture seule (sans possibilité de saisie ni de modification) permettant à tous les participants et spectateurs de suivre :
+              Ces liens donnent un accès direct en lecture seule (sans risque de saisie ni de modification). Choisissez le format adapté :
             </p>
-            <ul class="list-disc list-inside text-[11px] text-slate-400 space-y-1 font-mono">
-              <li>Le classement général et le podium en direct</li>
-              <li>La rotation automatique des classements par jeu</li>
-              <li>Le flux en temps réel des derniers scores enregistrés</li>
-            </ul>
           </div>
 
-          <!-- Share Link Box -->
-          <div class="space-y-2">
-            <label class="block text-xs font-mono font-bold text-slate-300 uppercase">
-              Lien public partageable :
-            </label>
+          <!-- Link 1: Interactive Spectator Hub -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-mono font-bold text-amber-300 uppercase flex items-center gap-1.5">
+                <Eye class="w-3.5 h-3.5" />
+                <span>1. Vue Interactive Spectateur (Mobile & PC) :</span>
+              </label>
+              <NuxtLink
+                :to="`/tournaments/${tournamentId}/public`"
+                target="_blank"
+                class="text-[11px] font-mono text-cyan-400 hover:underline flex items-center gap-1"
+              >
+                <span>Ouvrir</span>
+                <ExternalLink class="w-3 h-3" />
+              </NuxtLink>
+            </div>
+            <p class="text-[10px] text-slate-500 font-mono">
+              Navigation libre à travers les épreuves, classement général, détail des manches & matchs.
+            </p>
             <div class="flex items-center gap-2">
               <input 
-                :value="shareUrl" 
+                :value="shareInteractiveUrl" 
                 readonly
-                class="flex-1 px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-cyan-300 font-mono outline-none select-all"
+                class="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-amber-300 font-mono outline-none select-all"
               />
               <button
-                @click="copyShareUrl"
-                class="px-4 py-2.5 rounded-xl text-xs font-bold font-mono flex items-center gap-2 transition-all cursor-pointer shrink-0"
-                :class="shareCopied ? 'bg-emerald-500 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(6,182,212,0.3)]'"
+                @click="copyShareUrl('interactive')"
+                class="px-3.5 py-2 rounded-xl text-xs font-bold font-mono flex items-center gap-2 transition-all cursor-pointer shrink-0"
+                :class="shareCopiedInteractive ? 'bg-emerald-500 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.2)]'"
               >
-                <Check v-if="shareCopied" class="w-4 h-4" />
+                <Check v-if="shareCopiedInteractive" class="w-4 h-4" />
                 <Copy v-else class="w-4 h-4" />
-                <span>{{ shareCopied ? 'Copié !' : 'Copier' }}</span>
+                <span>{{ shareCopiedInteractive ? 'Copié !' : 'Copier' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Link 2: Big-Screen TV Cast -->
+          <div class="space-y-1.5 pt-2 border-t border-slate-800/60">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-mono font-bold text-cyan-300 uppercase flex items-center gap-1.5">
+                <Tv class="w-3.5 h-3.5" />
+                <span>2. Mode Diffusion TV (Vidéoprojecteur / Écran Géant) :</span>
+              </label>
+              <NuxtLink
+                :to="`/tournaments/${tournamentId}/public?mode=tv`"
+                target="_blank"
+                class="text-[11px] font-mono text-cyan-400 hover:underline flex items-center gap-1"
+              >
+                <span>Ouvrir</span>
+                <ExternalLink class="w-3 h-3" />
+              </NuxtLink>
+            </div>
+            <p class="text-[10px] text-slate-500 font-mono">
+              Rotation automatique grand format (toutes les 12s) optimisée pour affichage fixe en salle.
+            </p>
+            <div class="flex items-center gap-2">
+              <input 
+                :value="shareTvUrl" 
+                readonly
+                class="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-cyan-300 font-mono outline-none select-all"
+              />
+              <button
+                @click="copyShareUrl('tv')"
+                class="px-3.5 py-2 rounded-xl text-xs font-bold font-mono flex items-center gap-2 transition-all cursor-pointer shrink-0"
+                :class="shareCopiedTv ? 'bg-emerald-500 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(6,182,212,0.3)]'"
+              >
+                <Check v-if="shareCopiedTv" class="w-4 h-4" />
+                <Copy v-else class="w-4 h-4" />
+                <span>{{ shareCopiedTv ? 'Copié !' : 'Copier' }}</span>
               </button>
             </div>
           </div>
 
           <!-- Actions -->
-          <div class="flex items-center justify-between pt-4 border-t border-slate-800">
+          <div class="flex items-center justify-end pt-4 border-t border-slate-800">
             <button
               @click="isShareModalOpen = false"
-              class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+              class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
             >
               Fermer
             </button>
-
-            <NuxtLink
-              :to="`/tournaments/${tournamentId}/public`"
-              target="_blank"
-              class="px-4 py-2 text-xs font-bold font-mono rounded-lg bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 flex items-center gap-2 transition-all"
-            >
-              <span>Ouvrir la vue Live</span>
-              <ExternalLink class="w-3.5 h-3.5" />
-            </NuxtLink>
           </div>
 
         </div>

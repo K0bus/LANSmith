@@ -472,6 +472,38 @@ export default defineEventHandler(async (event) => {
         const totalMatches = matches.length
         const completedMatches = matches.filter((m) => m.status === 'COMPLETED').length
 
+        const formattedRounds = (tg.rounds || []).map((r: any) => ({
+          id: r.id,
+          roundNumber: r.roundNumber,
+          name: r.name,
+          scores: (r.scores || []).map((s: any) => ({
+            id: s.id,
+            participantId: s.participantId,
+            participantName: s.participant?.nickname || 'Joueur',
+            avatar: s.participant?.avatarUrl,
+            points: s.points,
+            rank: s.rank,
+            rawScore: s.rawScore,
+            isWinner: s.isWinner
+          })).sort((a: any, b: any) => (a.rank ?? 999) - (b.rank ?? 999) || b.points - a.points)
+        }))
+
+        const formattedMatches = matches.map((m: any) => ({
+          id: m.id,
+          roundNumber: m.roundNumber,
+          matchNumber: m.matchNumber,
+          status: m.status,
+          player1: m.player1 ? { id: m.player1.id, name: m.player1.nickname, avatar: m.player1.avatarUrl } : null,
+          player2: m.player2 ? { id: m.player2.id, name: m.player2.nickname, avatar: m.player2.avatarUrl } : null,
+          team1: m.team1 ? { id: m.team1.id, name: m.team1.name } : null,
+          team2: m.team2 ? { id: m.team2.id, name: m.team2.name } : null,
+          player1Score: m.player1Score,
+          player2Score: m.player2Score,
+          winnerId: m.winnerId,
+          winnerTeamId: m.winnerTeamId,
+          isDraw: m.isDraw
+        }))
+
         return {
           id: tg.game.id,
           tournamentGameId: tg.id,
@@ -487,7 +519,9 @@ export default defineEventHandler(async (event) => {
             : (tg.rounds ? tg.rounds.length : 0),
           totalMatches,
           completedMatches,
-          gameLeaderboard: gameStandings
+          gameLeaderboard: gameStandings,
+          rounds: formattedRounds,
+          matches: formattedMatches
         }
       })
     },
