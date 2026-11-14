@@ -6,7 +6,7 @@ services:
     container_name: lanforge_app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "8099:3000"
     env_file:
       - path: .env
         required: false
