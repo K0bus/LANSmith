@@ -25,26 +25,26 @@ const inputs1 = [
 const res1 = calculateRoundScores('WIN_LOSE', inputs1)
 const p1_pts = res1.find(r => r.participantId === 'p1')?.points
 const p3_pts = res1.find(r => r.participantId === 'p3')?.points
-assert(p1_pts === 4, `Gagnant reçoit 8 / 2 = 4 points (reçu: ${p1_pts})`)
+assert(p1_pts === 5, `Gagnant reçoit 10 / 2 = 5 points (reçu: ${p1_pts})`)
 assert(p3_pts === 0, `Perdant reçoit 0 point (reçu: ${p3_pts})`)
 
 console.log('\n=== TEST 2: Multi-Manches et Classement Final du Jeu ===')
 // Supposons un jeu avec 3 manches et 3 joueurs
-// Manche 1: P1 gagne (1 gagnant, 2 perdants -> 2 pts), P2 perd (0 pt), P3 perd (0 pt)
+// Manche 1: P1 gagne (1 gagnant, 3 joueurs -> 3 pts), P2 perd (0 pt), P3 perd (0 pt)
 const m1 = calculateRoundScores('WIN_LOSE', [
   { participantId: 'p1', isWinner: true },
   { participantId: 'p2', isWinner: false },
   { participantId: 'p3', isWinner: false }
 ])
 
-// Manche 2: P2 gagne (1 gagnant, 2 perdants -> 2 pts), P1 perd (0 pt), P3 perd (0 pt)
+// Manche 2: P2 gagne (1 gagnant, 3 joueurs -> 3 pts), P1 perd (0 pt), P3 perd (0 pt)
 const m2 = calculateRoundScores('WIN_LOSE', [
   { participantId: 'p1', isWinner: false },
   { participantId: 'p2', isWinner: true },
   { participantId: 'p3', isWinner: false }
 ])
 
-// Manche 3: P1 gagne (1 gagnant, 2 perdants -> 2 pts), P2 perd (0 pt), P3 perd (0 pt)
+// Manche 3: P1 gagne (1 gagnant, 3 joueurs -> 3 pts), P2 perd (0 pt), P3 perd (0 pt)
 const m3 = calculateRoundScores('WIN_LOSE', [
   { participantId: 'p1', isWinner: true },
   { participantId: 'p2', isWinner: false },
@@ -56,8 +56,8 @@ const p1_totalManche = (m1.find(r => r.participantId === 'p1')?.points || 0) + (
 const p2_totalManche = (m1.find(r => r.participantId === 'p2')?.points || 0) + (m2.find(r => r.participantId === 'p2')?.points || 0) + (m3.find(r => r.participantId === 'p2')?.points || 0)
 const p3_totalManche = (m1.find(r => r.participantId === 'p3')?.points || 0) + (m2.find(r => r.participantId === 'p3')?.points || 0) + (m3.find(r => r.participantId === 'p3')?.points || 0)
 
-assert(p1_totalManche === 4, `P1 a 4 points de manche (reçu: ${p1_totalManche})`)
-assert(p2_totalManche === 2, `P2 a 2 points de manche (reçu: ${p2_totalManche})`)
+assert(p1_totalManche === 6, `P1 a 6 points de manche (reçu: ${p1_totalManche})`)
+assert(p2_totalManche === 3, `P2 a 3 points de manche (reçu: ${p2_totalManche})`)
 assert(p3_totalManche === 0, `P3 a 0 point de manche (reçu: ${p3_totalManche})`)
 
 // Classement du jeu :

@@ -18,15 +18,13 @@ export function calculateRoundScores(
   points: number
 }> {
   if (scoringType === 'WIN_LOSE') {
-    // Count winners and losers among provided inputs
+    // Count winners and total participants
     const winners = inputs.filter((i) => i.isWinner === true)
-    const losers = inputs.filter((i) => i.isWinner === false)
-    
     const W = winners.length
-    const L = losers.length
+    const totalPlayers = inputs.length
 
-    // Formula: winners share pool equal to number of losers: points = L / W
-    const pointsPerWinner = W > 0 ? Number((L / W).toFixed(2)) : 0
+    // Formula: points pool = total players / number of winners
+    const pointsPerWinner = W > 0 ? Number((totalPlayers / W).toFixed(2)) : 0
 
     return inputs.map((item) => {
       const isWinner = item.isWinner === true

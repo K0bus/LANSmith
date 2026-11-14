@@ -456,7 +456,7 @@ async function deleteTournament(tournament: any) {
                         :class="getGameConfig(game.id)?.scoringType === 'WIN_LOSE'
                           ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
                           : 'text-slate-400 hover:text-white'"
-                        title="Les gagnants se partagent le nombre de points égal au nombre de perdants"
+                        title="Pool égal au nombre de joueurs divisé par le nombre de gagnants"
                       >
                         <Swords class="w-3.5 h-3.5" />
                         <span>Gagnant/Perdant</span>
@@ -478,7 +478,7 @@ async function deleteTournament(tournament: any) {
 
                   <!-- Details tip for win-lose if active -->
                   <div v-if="isGameSelected(game.id) && getGameConfig(game.id)?.scoringType === 'WIN_LOSE'" class="mt-2 text-[10px] font-mono text-rose-300/80 bg-rose-950/30 px-2.5 py-1 rounded border border-rose-900/40 flex items-center justify-between">
-                    <span>⚔️ Mode Victoire/Défaite : les gagnants se partagent les points des perdants (L / W).</span>
+                    <span>⚔️ Mode Victoire/Défaite : pool de points = nombre de joueurs / nombre de gagnants.</span>
                   </div>
 
                   <!-- Details & format for SCOREBOARD -->

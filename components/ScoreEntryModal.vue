@@ -108,10 +108,12 @@ const scoringRules = computed<number[]>(() => {
 const winLossStats = computed(() => {
   const winnersCount = rows.value.filter(r => r.isWinner === true).length
   const losersCount = rows.value.filter(r => r.isWinner === false).length
-  const pointsPerWinner = winnersCount > 0 ? Number((losersCount / winnersCount).toFixed(2)) : 0
+  const totalPlayers = rows.value.length
+  const pointsPerWinner = winnersCount > 0 ? Number((totalPlayers / winnersCount).toFixed(2)) : 0
   return {
     winnersCount,
     losersCount,
+    totalPlayers,
     pointsPerWinner
   }
 })
@@ -440,10 +442,9 @@ function syncRowsFromTeams() {
 function recalculatePoints() {
   if (activeScoringType.value === 'WIN_LOSE') {
     const winners = rows.value.filter(r => r.isWinner === true)
-    const losers = rows.value.filter(r => r.isWinner === false)
     const W = winners.length
-    const L = losers.length
-    const pts = W > 0 ? Number((L / W).toFixed(2)) : 0
+    const totalPlayers = rows.value.length
+    const pts = W > 0 ? Number((totalPlayers / W).toFixed(2)) : 0
 
     for (const r of rows.value) {
       r.points = r.isWinner ? pts : 0
@@ -701,7 +702,7 @@ async function deleteCurrentRound() {
             </div>
           </div>
           <p class="text-[11px] text-slate-400 mt-1">
-            Formule : Les vainqueurs se partagent les points équivalents au nombre total de perdants ({{ winLossStats.losersCount }} pts ÷ {{ winLossStats.winnersCount || 1 }} = {{ winLossStats.pointsPerWinner }} pts chacun).
+            Formule : Les vainqueurs se partagent un pool égal au nombre total de joueurs ({{ winLossStats.totalPlayers }} pts ÷ {{ winLossStats.winnersCount || 1 }} gagnant(s) = {{ winLossStats.pointsPerWinner }} pts chacun).
           </p>
 
           <!-- Quick actions for win/loss -->
