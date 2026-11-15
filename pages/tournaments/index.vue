@@ -478,7 +478,7 @@ async function deleteTournament(tournament: any) {
 
                   <!-- Details tip for win-lose if active -->
                   <div v-if="isGameSelected(game.id) && getGameConfig(game.id)?.scoringType === 'WIN_LOSE'" class="mt-2 text-[10px] font-mono text-rose-300/80 bg-rose-950/30 px-2.5 py-1 rounded border border-rose-900/40 flex items-center justify-between">
-                    <span>⚔️ Mode Victoire/Défaite : pool de points = nombre de joueurs / nombre de gagnants.</span>
+                    <span>⚔️ Mode Victoire/Défaite : pool de points = nombre de joueurs / nombre de gagnants (+ points bonus optionnels à 50%).</span>
                   </div>
 
                   <!-- Details & format for SCOREBOARD -->

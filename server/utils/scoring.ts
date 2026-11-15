@@ -1,6 +1,7 @@
 export interface CalculateScoreInput {
   participantId: string
   isWinner?: boolean | null
+  hasBonus?: boolean | null
   rank?: number | null
   rawScore?: number | null
   points?: number
@@ -13,6 +14,7 @@ export function calculateRoundScores(
 ): Array<{
   participantId: string
   isWinner?: boolean | null
+  hasBonus?: boolean | null
   rank?: number | null
   rawScore?: number | null
   points: number
@@ -25,15 +27,23 @@ export function calculateRoundScores(
 
     // Formula: points pool = total players / number of winners
     const pointsPerWinner = W > 0 ? Number((totalPlayers / W).toFixed(2)) : 0
+    // Bonus points = half of winners points (rounded to 2 decimal places), without impacting winner points
+    const bonusPoints = W > 0 ? Number((pointsPerWinner / 2).toFixed(2)) : 0
 
     return inputs.map((item) => {
       const isWinner = item.isWinner === true
+      const hasBonus = item.hasBonus === true
+      let pts = 0
+      if (isWinner) pts += pointsPerWinner
+      if (hasBonus) pts += bonusPoints
+
       return {
         participantId: item.participantId,
         isWinner: item.isWinner ?? null,
+        hasBonus: item.hasBonus ?? null,
         rank: item.rank ?? null,
         rawScore: item.rawScore ?? null,
-        points: isWinner ? pointsPerWinner : 0
+        points: Number(pts.toFixed(2))
       }
     })
   }
@@ -53,6 +63,7 @@ export function calculateRoundScores(
     return {
       participantId: item.participantId,
       isWinner: item.isWinner ?? null,
+      hasBonus: item.hasBonus ?? null,
       rank: item.rank ?? null,
       rawScore: item.rawScore ?? null,
       points: pts

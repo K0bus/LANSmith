@@ -1158,7 +1158,14 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <div class="text-right shrink-0">
+              <div class="text-right shrink-0 flex items-center gap-1.5 justify-end">
+                <span 
+                  v-if="score.hasBonus" 
+                  class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  title="Point Bonus (+50%)"
+                >
+                  ⭐ Bonus
+                </span>
                 <span 
                   class="px-2 py-0.5 rounded font-bold"
                   :class="score.isWinner ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-slate-900 text-slate-400'"
@@ -1460,19 +1467,28 @@ onUnmounted(() => {
                       {{ score.rawScore !== null && score.rawScore !== undefined ? score.rawScore : '-' }}
                     </td>
                     <td class="p-3 text-center">
-                      <span 
-                        v-if="score.isWinner" 
-                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                      >
-                        🏆 Vainqueur
-                      </span>
-                      <span 
-                        v-else-if="score.isWinner === false"
-                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400"
-                      >
-                        Défaite
-                      </span>
-                      <span v-else class="text-slate-600">-</span>
+                      <div class="inline-flex items-center justify-center gap-1.5 flex-wrap">
+                        <span 
+                          v-if="score.isWinner" 
+                          class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                        >
+                          🏆 Vainqueur
+                        </span>
+                        <span 
+                          v-else-if="score.isWinner === false"
+                          class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400"
+                        >
+                          Défaite
+                        </span>
+                        <span 
+                          v-if="score.hasBonus"
+                          class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"
+                          title="Point Bonus (+50% d'un gagnant)"
+                        >
+                          ⭐ Bonus
+                        </span>
+                        <span v-if="!score.isWinner && score.isWinner !== false && !score.hasBonus" class="text-slate-600">-</span>
+                      </div>
                     </td>
                     <td class="p-3 text-right font-bold text-amber-400">
                       +{{ score.points }} pts

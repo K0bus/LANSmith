@@ -28,6 +28,60 @@ const p3_pts = res1.find(r => r.participantId === 'p3')?.points
 assert(p1_pts === 5, `Gagnant reçoit 10 / 2 = 5 points (reçu: ${p1_pts})`)
 assert(p3_pts === 0, `Perdant reçoit 0 point (reçu: ${p3_pts})`)
 
+console.log('\n=== TEST 1B: Mode WIN_LOSE avec Points Bonus (50% des gagnants sans impact sur le pool) ===')
+const inputsBonus = [
+  { participantId: 'p1', isWinner: true, hasBonus: false },  // Gagnant normal: 5 pts
+  { participantId: 'p2', isWinner: true, hasBonus: true },   // Gagnant + Bonus: 5 + 2.5 = 7.5 pts
+  { participantId: 'p3', isWinner: false, hasBonus: true },  // Perdant + Bonus: 0 + 2.5 = 2.5 pts
+  { participantId: 'p4', isWinner: false, hasBonus: false }  // Perdant normal: 0 pt
+]
+// 4 joueurs, 2 gagnants -> pointsPerWinner = 4 / 2 = 2.0 pts
+// bonusPoints = 2.0 / 2 = 1.0 pt
+const resBonus = calculateRoundScores('WIN_LOSE', inputsBonus)
+const b_p1 = resBonus.find(r => r.participantId === 'p1')
+const b_p2 = resBonus.find(r => r.participantId === 'p2')
+const b_p3 = resBonus.find(r => r.participantId === 'p3')
+const b_p4 = resBonus.find(r => r.participantId === 'p4')
+
+assert(b_p1?.points === 2, `Gagnant sans bonus reçoit 2 pts (reçu: ${b_p1?.points})`)
+assert(b_p2?.points === 3, `Gagnant avec bonus reçoit 2 + 1 = 3 pts (reçu: ${b_p2?.points})`)
+assert(b_p3?.points === 1, `Perdant avec bonus reçoit 0 + 1 = 1 pt (reçu: ${b_p3?.points})`)
+assert(b_p4?.points === 0, `Perdant sans bonus reçoit 0 pt (reçu: ${b_p4?.points})`)
+assert(b_p2?.hasBonus === true, 'Le statut hasBonus est bien conservé')
+assert(b_p3?.hasBonus === true, 'Le statut hasBonus est bien conservé pour perdant')
+
+// Cas avec 10 joueurs, 2 gagnants: pointsPerWinner = 5, bonus = 2.5
+const inputsBonus10 = [
+  { participantId: 'p1', isWinner: true, hasBonus: false }, // 5 pts
+  { participantId: 'p2', isWinner: true, hasBonus: true },  // 5 + 2.5 = 7.5 pts
+  { participantId: 'p3', isWinner: false, hasBonus: true }, // 2.5 pts
+  { participantId: 'p4', isWinner: false, hasBonus: false },
+  { participantId: 'p5', isWinner: false, hasBonus: false },
+  { participantId: 'p6', isWinner: false, hasBonus: false },
+  { participantId: 'p7', isWinner: false, hasBonus: false },
+  { participantId: 'p8', isWinner: false, hasBonus: false },
+  { participantId: 'p9', isWinner: false, hasBonus: false },
+  { participantId: 'p10', isWinner: false, hasBonus: false }
+]
+const resBonus10 = calculateRoundScores('WIN_LOSE', inputsBonus10)
+const b10_p1 = resBonus10.find(r => r.participantId === 'p1')?.points
+const b10_p2 = resBonus10.find(r => r.participantId === 'p2')?.points
+const b10_p3 = resBonus10.find(r => r.participantId === 'p3')?.points
+const b10_p4 = resBonus10.find(r => r.participantId === 'p4')?.points
+
+assert(b10_p1 === 5, `10 joueurs, 2 gagnants: gagnant normal reçoit 5 pts (reçu: ${b10_p1})`)
+assert(b10_p2 === 7.5, `10 joueurs, 2 gagnants: gagnant + bonus reçoit 7.5 pts (reçu: ${b10_p2})`)
+assert(b10_p3 === 2.5, `10 joueurs, 2 gagnants: perdant + bonus reçoit 2.5 pts (reçu: ${b10_p3})`)
+assert(b10_p4 === 0, `10 joueurs, 2 gagnants: perdant normal reçoit 0 pt (reçu: ${b10_p4})`)
+
+// Cas sans gagnant (0 gagnant):
+const inputsNoWinner = [
+  { participantId: 'p1', isWinner: false, hasBonus: true },
+  { participantId: 'p2', isWinner: false, hasBonus: false }
+]
+const resNoWinner = calculateRoundScores('WIN_LOSE', inputsNoWinner)
+assert(resNoWinner[0].points === 0, '0 gagnant: bonus = 0 pt')
+
 console.log('\n=== TEST 2: Multi-Manches et Classement Final du Jeu ===')
 // Supposons un jeu avec 3 manches et 3 joueurs
 // Manche 1: P1 gagne (1 gagnant, 3 joueurs -> 3 pts), P2 perd (0 pt), P3 perd (0 pt)

@@ -229,6 +229,7 @@ export default defineEventHandler(async (event) => {
         roundDetails: Array<{
           roundNumber: number
           isWinner?: boolean | null
+          hasBonus?: boolean | null
           rank?: number | null
           rawScore?: number | null
           points: number
@@ -255,6 +256,7 @@ export default defineEventHandler(async (event) => {
             pGameData.roundDetails.push({
               roundNumber: round.roundNumber,
               isWinner: rScore.isWinner,
+              hasBonus: rScore.hasBonus,
               rank: rScore.rank,
               rawScore: rScore.rawScore,
               points: rScore.points
@@ -360,7 +362,8 @@ export default defineEventHandler(async (event) => {
           points: rScore.points,
           rank: rScore.rank,
           rawScore: rScore.rawScore,
-          isWinner: rScore.isWinner
+          isWinner: rScore.isWinner,
+          hasBonus: rScore.hasBonus
         })
       }
     }
@@ -484,7 +487,8 @@ export default defineEventHandler(async (event) => {
             points: s.points,
             rank: s.rank,
             rawScore: s.rawScore,
-            isWinner: s.isWinner
+            isWinner: s.isWinner,
+            hasBonus: s.hasBonus
           })).sort((a: any, b: any) => (a.rank ?? 999) - (b.rank ?? 999) || b.points - a.points)
         }))
 

@@ -163,6 +163,7 @@ model RoundScore {
   participant   Participant     @relation(fields: [participantId], references: [id], onDelete: Cascade)
   
   isWinner      Boolean?
+  hasBonus      Boolean?        @default(false)
   rank          Int?
   rawScore      Float?
   points        Float           @default(0)

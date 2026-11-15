@@ -107,12 +107,14 @@ export default defineEventHandler(async (event) => {
         roundId: targetRound.id,
         participantId: cs.participantId,
         isWinner: cs.isWinner,
+        hasBonus: cs.hasBonus,
         rank: cs.rank,
         rawScore: cs.rawScore,
         points: cs.points
       },
       update: {
         isWinner: cs.isWinner,
+        hasBonus: cs.hasBonus,
         rank: cs.rank,
         rawScore: cs.rawScore,
         points: cs.points

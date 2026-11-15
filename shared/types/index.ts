@@ -113,6 +113,7 @@ export interface RoundScoreItem {
   id?: string
   participantId: string
   isWinner?: boolean | null
+  hasBonus?: boolean | null
   rank?: number | null
   rawScore?: number | null
   points: number
@@ -234,6 +235,7 @@ export interface LeaderboardEntry {
     roundDetails: {
       roundNumber: number
       isWinner?: boolean | null
+      hasBonus?: boolean | null
       rank?: number | null
       rawScore?: number | null
       points: number

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { Trophy, Save, X, Trash2, Plus, Swords, ListOrdered, Check, AlertCircle, Shuffle, Users, Sparkles, RefreshCw, Zap } from 'lucide-vue-next'
+import { Trophy, Save, X, Trash2, Plus, Swords, ListOrdered, Check, AlertCircle, Shuffle, Users, Sparkles, RefreshCw, Zap, Star } from 'lucide-vue-next'
 import type { ScoringType } from '~/shared/types'
 import { generateBalancedTeams } from '~/server/utils/roundRobin'
 
@@ -31,6 +31,7 @@ interface ParticipantRow {
   avatar: string | null
   // Win / Lose mode
   isWinner: boolean | null
+  hasBonus?: boolean | null
   // Scoreboard mode
   rank: number | ''
   rawScore: number | ''
@@ -108,13 +109,17 @@ const scoringRules = computed<number[]>(() => {
 const winLossStats = computed(() => {
   const winnersCount = rows.value.filter(r => r.isWinner === true).length
   const losersCount = rows.value.filter(r => r.isWinner === false).length
+  const bonusCount = rows.value.filter(r => r.hasBonus === true).length
   const totalPlayers = rows.value.length
   const pointsPerWinner = winnersCount > 0 ? Number((totalPlayers / winnersCount).toFixed(2)) : 0
+  const bonusPoints = winnersCount > 0 ? Number((pointsPerWinner / 2).toFixed(2)) : 0
   return {
     winnersCount,
     losersCount,
+    bonusCount,
     totalPlayers,
-    pointsPerWinner
+    pointsPerWinner,
+    bonusPoints
   }
 })
 
@@ -181,6 +186,7 @@ function initRows() {
         participantName: p.nickname || p.name || 'Participant',
         avatar: p.avatarUrl || p.avatar,
         isWinner: existing ? existing.isWinner : false,
+        hasBonus: existing ? (existing.hasBonus ?? false) : false,
         rank: existing?.rank ?? '',
         rawScore: existing?.rawScore ?? '',
         points: existing?.points ?? 0
@@ -196,6 +202,7 @@ function initRows() {
       participantName: p.nickname || p.name || 'Participant',
       avatar: p.avatarUrl || p.avatar,
       isWinner: false,
+      hasBonus: false,
       rank: '',
       rawScore: '',
       points: 0
@@ -383,6 +390,13 @@ function setAllWinners(isWinner: boolean) {
   recalculatePoints()
 }
 
+function resetAllBonuses() {
+  for (const r of rows.value) {
+    r.hasBonus = false
+  }
+  recalculatePoints()
+}
+
 function onRankChange(row: ParticipantRow) {
   recalculatePoints()
 }
@@ -424,6 +438,7 @@ function syncRowsFromTeams() {
           participantName: m.nickname,
           avatar: m.avatarUrl || null,
           isWinner: null,
+          hasBonus: null,
           rank: team.rank,
           rawScore: team.rawScore,
           points: team.points
@@ -445,9 +460,13 @@ function recalculatePoints() {
     const W = winners.length
     const totalPlayers = rows.value.length
     const pts = W > 0 ? Number((totalPlayers / W).toFixed(2)) : 0
+    const bonusPts = W > 0 ? Number((pts / 2).toFixed(2)) : 0
 
     for (const r of rows.value) {
-      r.points = r.isWinner ? pts : 0
+      let total = 0
+      if (r.isWinner) total += pts
+      if (r.hasBonus) total += bonusPts
+      r.points = Number(total.toFixed(2))
     }
   } else if (isTeamMode.value) {
     // Scoreboard in Team Mode
@@ -494,6 +513,7 @@ async function saveRound() {
       scores: rows.value.map(r => ({
         participantId: r.participantId,
         isWinner: activeScoringType.value === 'WIN_LOSE' ? (r.isWinner ?? false) : undefined,
+        hasBonus: activeScoringType.value === 'WIN_LOSE' ? (r.hasBonus ?? false) : undefined,
         rank: activeScoringType.value === 'SCOREBOARD' ? (r.rank !== '' ? Number(r.rank) : undefined) : undefined,
         rawScore: r.rawScore !== '' ? Number(r.rawScore) : undefined
       }))
@@ -691,18 +711,29 @@ async function deleteCurrentRound() {
               <span class="font-bold text-white">Mode Victoire / Défaite :</span>
               <span class="text-rose-300">
                 {{ winLossStats.winnersCount }} Gagnant(s) · {{ winLossStats.losersCount }} Perdant(s)
+                <span v-if="winLossStats.bonusCount > 0" class="text-amber-300 font-bold ml-1">
+                  · {{ winLossStats.bonusCount }} Bonus
+                </span>
               </span>
             </div>
 
-            <div class="flex items-center gap-2">
-              <span class="text-slate-400 text-[11px]">Gain par gagnant :</span>
-              <span class="px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/50 font-black text-sm">
-                +{{ winLossStats.pointsPerWinner }} pts
-              </span>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-1.5">
+                <span class="text-slate-400 text-[11px]">Gagnant :</span>
+                <span class="px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/50 font-black text-sm">
+                  +{{ winLossStats.pointsPerWinner }} pts
+                </span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-slate-400 text-[11px]">Bonus (+50%) :</span>
+                <span class="px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/50 font-black text-sm">
+                  +{{ winLossStats.bonusPoints }} pts
+                </span>
+              </div>
             </div>
           </div>
           <p class="text-[11px] text-slate-400 mt-1">
-            Formule : Les vainqueurs se partagent un pool égal au nombre total de joueurs ({{ winLossStats.totalPlayers }} pts ÷ {{ winLossStats.winnersCount || 1 }} gagnant(s) = {{ winLossStats.pointsPerWinner }} pts chacun).
+            Formule : Les vainqueurs se partagent un pool égal au nombre total de joueurs ({{ winLossStats.totalPlayers }} pts ÷ {{ winLossStats.winnersCount || 1 }} gagnant(s) = {{ winLossStats.pointsPerWinner }} pts chacun). Le point bonus attribue la moitié des points d'un gagnant (+{{ winLossStats.bonusPoints }} pts) sans impacter le pool des vainqueurs.
           </p>
 
           <!-- Quick actions for win/loss -->
@@ -720,6 +751,14 @@ async function deleteCurrentRound() {
               class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800"
             >
               Tous Perdants
+            </button>
+            <button 
+              v-if="winLossStats.bonusCount > 0"
+              type="button" 
+              @click="resetAllBonuses()"
+              class="px-2 py-0.5 rounded bg-amber-950/50 hover:bg-amber-900/50 text-amber-300 border border-amber-800/60"
+            >
+              Réinitialiser Bonus ({{ winLossStats.bonusCount }})
             </button>
           </div>
         </div>
@@ -919,7 +958,7 @@ async function deleteCurrentRound() {
                 
                 <!-- If WIN_LOSE mode -->
                 <template v-if="activeScoringType === 'WIN_LOSE'">
-                  <th class="py-2 text-center w-48">Statut de la manche</th>
+                  <th class="py-2 text-center w-64">Statut & Bonus</th>
                 </template>
 
                 <!-- If SCOREBOARD mode -->
@@ -938,30 +977,46 @@ async function deleteCurrentRound() {
                   <span class="truncate">{{ row.participantName }}</span>
                 </td>
 
-                <!-- WIN_LOSE Toggle Buttons -->
+                <!-- WIN_LOSE Toggle Buttons & Bonus Toggle -->
                 <td v-if="activeScoringType === 'WIN_LOSE'" class="py-2 text-center">
-                  <div class="inline-flex rounded-lg p-0.5 bg-slate-950 border border-slate-800">
+                  <div class="inline-flex items-center gap-2">
+                    <div class="inline-flex rounded-lg p-0.5 bg-slate-950 border border-slate-800">
+                      <button
+                        type="button"
+                        @click="row.isWinner = true; recalculatePoints()"
+                        class="px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1"
+                        :class="row.isWinner === true
+                          ? 'bg-emerald-500 text-slate-950 shadow-[0_0_10px_rgba(16,185,129,0.5)]'
+                          : 'text-slate-400 hover:text-white'"
+                      >
+                        <Check class="w-3.5 h-3.5" />
+                        <span>Gagnant</span>
+                      </button>
+                      <button
+                        type="button"
+                        @click="row.isWinner = false; recalculatePoints()"
+                        class="px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1"
+                        :class="row.isWinner === false
+                          ? 'bg-slate-700 text-slate-200'
+                          : 'text-slate-500 hover:text-white'"
+                      >
+                        <X class="w-3.5 h-3.5" />
+                        <span>Perdant</span>
+                      </button>
+                    </div>
+
+                    <!-- Bonus toggle button -->
                     <button
                       type="button"
-                      @click="row.isWinner = true; recalculatePoints()"
-                      class="px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1"
-                      :class="row.isWinner === true
-                        ? 'bg-emerald-500 text-slate-950 shadow-[0_0_10px_rgba(16,185,129,0.5)]'
-                        : 'text-slate-400 hover:text-white'"
+                      @click="row.hasBonus = !row.hasBonus; recalculatePoints()"
+                      class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border"
+                      :class="row.hasBonus
+                        ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.4)]'
+                        : 'bg-slate-950/80 text-slate-400 border-slate-800 hover:text-amber-300 hover:border-slate-700'"
+                      :title="`Bonus : +${winLossStats.bonusPoints} pts (50% des points gagnants)`"
                     >
-                      <Check class="w-3.5 h-3.5" />
-                      <span>Gagnant</span>
-                    </button>
-                    <button
-                      type="button"
-                      @click="row.isWinner = false; recalculatePoints()"
-                      class="px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1"
-                      :class="row.isWinner === false
-                        ? 'bg-slate-700 text-slate-200'
-                        : 'text-slate-500 hover:text-white'"
-                    >
-                      <X class="w-3.5 h-3.5" />
-                      <span>Perdant</span>
+                      <Star class="w-3.5 h-3.5" :class="{ 'fill-slate-950 text-slate-950': row.hasBonus, 'text-amber-400': !row.hasBonus }" />
+                      <span>Bonus</span>
                     </button>
                   </div>
                 </td>
